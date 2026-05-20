@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from app.core.config import settings
@@ -40,6 +41,30 @@ class IngestionPipeline:
         document_id = document.id
         return (settings.markdown_dir_path / source_type / owner_folder / document_id / "document.md").as_posix()
 
+    def _extract_markdown_page_metadata(self, markdown_text: str) -> tuple[int | None, str | None]:
+        page_numbers = [int(match) for match in re.findall(r"^<!--\s*page:\s*(\d+)\s*-->$", markdown_text, flags=re.IGNORECASE | re.MULTILINE)]
+        page_source_match = re.search(r"^<!--\s*page_source:\s*([^>]+?)\s*-->$", markdown_text, flags=re.IGNORECASE | re.MULTILINE)
+        if page_numbers:
+            page_source = page_source_match.group(1).strip() if page_source_match else None
+            return max(page_numbers), page_source
+
+        page_count_match = re.search(
+            r"^<!--\s*page_count:\s*(\d+)(?:;\s*page_source:\s*([^>]+?))?\s*-->$",
+            markdown_text,
+            flags=re.IGNORECASE | re.MULTILINE,
+        )
+        if page_count_match:
+            page_source = page_count_match.group(2).strip() if page_count_match.group(2) else "docx_app_properties"
+            return int(page_count_match.group(1)), page_source
+        return None, None
+
+    def _extract_procedure_title(self, markdown_text: str) -> str | None:
+        match = re.search(r"^Tên thủ tục:\s*(?P<title>.+?)\s*$", markdown_text, flags=re.IGNORECASE | re.MULTILINE)
+        if not match:
+            return None
+        title = re.sub(r"\s+", " ", match.group("title")).strip()
+        return title or None
+
     async def run(
         self,
         document: DocumentModel,
@@ -71,6 +96,7 @@ class IngestionPipeline:
 
             with open(markdown_path, "r", encoding="utf-8") as f:
                 markdown_text = f.read()
+            procedure_title = self._extract_procedure_title(markdown_text)
 
             if job_id:
                 await self.ingestion_job_repository.update_job_status(
@@ -86,6 +112,7 @@ class IngestionPipeline:
                 "owner_user_id": document.owner_user_id,
                 "session_id": document.uploaded_in_session_id,
                 "filename": document.filename,
+                "procedure_title": procedure_title,
                 "visibility": document.visibility,
             }
             chunks = self.chunker.chunk(markdown_text, base_metadata)
@@ -100,10 +127,12 @@ class IngestionPipeline:
                     "owner_user_id": document.owner_user_id,
                     "session_id": document.uploaded_in_session_id,
                     "filename": document.filename,
+                    "procedure_title": procedure_title,
                     "visibility": document.visibility,
                     "page_number": chunk.get("page_number"),
                     "page_start": chunk.get("page_start"),
                     "page_end": chunk.get("page_end"),
+                    "page_source": chunk.get("page_source"),
                     "section_title": chunk.get("section_title"),
                     "heading_path": chunk.get("heading_path", []),
                     "chunk_index": chunk.get("chunk_index", 0),
@@ -145,18 +174,23 @@ class IngestionPipeline:
             if chunk_docs:
                 self.vector_store.add_chunks(chunk_docs, embeddings)
             page_numbers = [chunk.get("page_number") for chunk in chunk_docs if chunk.get("page_number") is not None]
-            page_count = len(set(page_numbers)) if page_numbers else None
+            markdown_page_count, page_source = self._extract_markdown_page_metadata(markdown_text)
+            page_count = len(set(page_numbers)) if page_numbers else markdown_page_count
             await self.document_repository.update_document_fields(
                 document.id,
                 status=DOCUMENT_STATUS_READY,
                 markdown_storage_path=markdown_path,
                 chunk_count=len(chunk_docs),
                 page_count=page_count,
+                page_source=page_source,
+                procedure_title=procedure_title,
             )
             document.markdown_storage_path = markdown_path
             document.status = DOCUMENT_STATUS_READY
             document.chunk_count = len(chunk_docs)
             document.page_count = page_count
+            document.page_source = page_source
+            document.procedure_title = procedure_title
 
             if job_id:
                 await self.ingestion_job_repository.update_job_status(

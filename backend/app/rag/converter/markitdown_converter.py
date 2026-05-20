@@ -2,9 +2,17 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Iterator
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
+import xml.etree.ElementTree as ET
 
 from docx import Document as DocxDocument
+from docx.document import Document as DocxDocumentObject
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 from pypdf import PdfReader
 
 try:
@@ -17,8 +25,25 @@ else:
 
 
 class MarkItDownMarkdownConverter:
+    _word_namespace = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    _extended_properties_namespace = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
     _page_marker_pattern = re.compile(r"^##\s*Page\s+(?P<page>\d+)\s*$", re.IGNORECASE)
     _numeric_heading_pattern = re.compile(r"^(?P<num>\d+(?:\.\d+)*)\.\s+(?P<title>.+?)\s*$")
+    _procedure_title_pattern = re.compile(r"^Tên thủ tục:\s*(?P<title>.+?)\s*$", re.IGNORECASE)
+    _empty_metadata_lines = {
+        "Từ khóa: Không có thông tin",
+        "Mô tả: Không có thông tin",
+    }
+    _generic_table_context_lines = {
+        "Bao gồm",
+    }
+    _procedure_section_labels = {
+        "Trình tự thực hiện",
+        "Cách thức thực hiện",
+        "Thành phần hồ sơ",
+        "Căn cứ pháp lý",
+        "Yêu cầu, điều kiện thực hiện",
+    }
 
     def __init__(self) -> None:
         self._converter = MarkItDown() if MarkItDown is not None else None
@@ -59,24 +84,136 @@ class MarkItDownMarkdownConverter:
             parts.append(f"## Page {page_index}\n\n{text.strip()}\n")
         return "\n".join(part for part in parts if part.strip()).strip()
 
+    def _iter_docx_blocks(self, doc: DocxDocumentObject) -> Iterator[Paragraph | Table]:
+        for child in doc.element.body.iterchildren():
+            if isinstance(child, CT_P):
+                yield Paragraph(child, doc)
+            elif isinstance(child, CT_Tbl):
+                yield Table(child, doc)
+
+    def _count_paragraph_page_breaks(self, paragraph: Paragraph, page_source: str | None) -> int:
+        if page_source == "docx_last_rendered_page_break":
+            return len(paragraph._element.findall(f".//{{{self._word_namespace}}}lastRenderedPageBreak"))
+        if page_source == "docx_hard_page_break":
+            count = 0
+            for br in paragraph._element.findall(f".//{{{self._word_namespace}}}br"):
+                if br.get(f"{{{self._word_namespace}}}type") == "page":
+                    count += 1
+            return count
+        return 0
+
+    def _docx_page_break_metadata(self, doc: DocxDocumentObject) -> tuple[int, str | None]:
+        rendered_count = 0
+        hard_break_count = 0
+        for paragraph in doc.paragraphs:
+            rendered_count += self._count_paragraph_page_breaks(paragraph, "docx_last_rendered_page_break")
+            hard_break_count += self._count_paragraph_page_breaks(paragraph, "docx_hard_page_break")
+        if rendered_count > 0:
+            return rendered_count, "docx_last_rendered_page_break"
+        if hard_break_count > 0:
+            return hard_break_count, "docx_hard_page_break"
+        return 0, None
+
+    def _docx_app_page_count(self, input_file: Path) -> int | None:
+        try:
+            with ZipFile(input_file) as archive:
+                if "docProps/app.xml" not in archive.namelist():
+                    return None
+                root = ET.fromstring(archive.read("docProps/app.xml"))
+        except (BadZipFile, KeyError, ET.ParseError):
+            return None
+
+        pages_node = root.find(f"{{{self._extended_properties_namespace}}}Pages")
+        if pages_node is None or not pages_node.text:
+            return None
+        try:
+            page_count = int(pages_node.text)
+        except ValueError:
+            return None
+        return page_count if page_count > 0 else None
+
+    def _format_docx_paragraph(self, paragraph: Paragraph) -> str:
+        text = paragraph.text.strip()
+        if not text:
+            return ""
+        normalized = self._normalize_line(text)
+        for label in self._procedure_section_labels:
+            if normalized == f"{label}:":
+                return f"## {label}"
+            if normalized.startswith(f"{label}: "):
+                value = normalized.removeprefix(f"{label}: ").strip()
+                if value:
+                    return f"## {label}\n\n{value}"
+        if paragraph.style and paragraph.style.name:
+            style_name = paragraph.style.name.lower()
+            if style_name.startswith("heading"):
+                try:
+                    level = int("".join(ch for ch in style_name if ch.isdigit()) or "1")
+                except ValueError:
+                    level = 1
+                level = max(1, min(level, 6))
+                return f"{'#' * level} {text}"
+        return text
+
+    def _format_docx_table_cell(self, text: str) -> str:
+        lines = [self._normalize_line(line) for line in text.replace("\r", "\n").split("\n")]
+        return "; ".join(line for line in lines if line)
+
+    def _format_docx_table(self, table: Table, table_title: str | None, procedure_title: str | None) -> str:
+        rows = [[self._format_docx_table_cell(cell.text) for cell in row.cells] for row in table.rows]
+        rows = [row for row in rows if any(cell for cell in row)]
+        if not rows:
+            return ""
+
+        column_count = max(len(row) for row in rows)
+        padded_rows = [row + [""] * (column_count - len(row)) for row in rows]
+        headers = [header or f"Cột {index}" for index, header in enumerate(padded_rows[0], start=1)]
+        lines: list[str] = []
+        for row_index, row in enumerate(padded_rows[1:], start=1):
+            pairs = [f"{header}: {value}" for header, value in zip(headers, row) if value]
+            if pairs:
+                lines.append("- " + ". ".join(pairs) + ".")
+        if not lines:
+            return ""
+
+        normalized_table_title = (table_title or "thông tin").strip().lstrip("#").strip().rstrip(":")
+        if procedure_title:
+            title_line = f'Bảng {normalized_table_title.lower()} của thủ tục "{procedure_title}":'
+        else:
+            title_line = f"Bảng {normalized_table_title.lower()}:"
+        lines.insert(0, title_line)
+        return "\n".join(lines)
+
     def _fallback_convert_docx(self, input_file: Path) -> str:
         doc = DocxDocument(str(input_file))
         parts: list[str] = []
-        for paragraph in doc.paragraphs:
-            text = paragraph.text.strip()
-            if not text:
-                continue
-            if paragraph.style and paragraph.style.name:
-                style_name = paragraph.style.name.lower()
-                if style_name.startswith("heading"):
-                    try:
-                        level = int("".join(ch for ch in style_name if ch.isdigit()) or "1")
-                    except ValueError:
-                        level = 1
-                    level = max(1, min(level, 6))
-                    parts.append(f"{'#' * level} {text}")
-                    continue
-            parts.append(text)
+        page_break_count, page_source = self._docx_page_break_metadata(doc)
+        app_page_count = self._docx_app_page_count(input_file)
+        current_page = 1
+        if page_break_count > 0 and page_source:
+            parts.append(f"<!-- page_source: {page_source} -->")
+            parts.append(f"<!-- page: {current_page} -->")
+        elif app_page_count is not None:
+            parts.append(f"<!-- page_count: {app_page_count}; page_source: docx_app_properties -->")
+
+        procedure_title: str | None = None
+        previous_text: str | None = None
+        for block in self._iter_docx_blocks(doc):
+            if isinstance(block, Paragraph):
+                text = self._format_docx_paragraph(block)
+                match = self._procedure_title_pattern.match(self._normalize_line(text))
+                if match:
+                    procedure_title = match.group("title")
+            else:
+                text = self._format_docx_table(block, previous_text, procedure_title)
+            if text:
+                parts.append(text)
+                if isinstance(block, Paragraph) and self._normalize_line(text) not in self._generic_table_context_lines:
+                    previous_text = text
+            if isinstance(block, Paragraph):
+                for _ in range(self._count_paragraph_page_breaks(block, page_source)):
+                    current_page += 1
+                    parts.append(f"<!-- page: {current_page} -->")
         return "\n\n".join(parts).strip()
 
     def _fallback_convert(self, input_file: Path) -> str:
@@ -91,7 +228,12 @@ class MarkItDownMarkdownConverter:
         return markdown_text
 
     def _clean_default(self, markdown_text: str) -> str:
-        return self._normalize_whitespace(markdown_text)
+        lines = []
+        for line in markdown_text.splitlines():
+            if self._normalize_line(line) in self._empty_metadata_lines:
+                continue
+            lines.append(line)
+        return self._normalize_whitespace("\n".join(lines))
 
     def _is_noise_line(self, line: str) -> bool:
         normalized = self._normalize_line(line)

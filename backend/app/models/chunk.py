@@ -26,9 +26,11 @@ class ChunkModel(MongoBaseModel):
     owner_user_id: Optional[str] = None
     session_id: Optional[str] = None
     filename: str
+    procedure_title: Optional[str] = None
     file_type: Optional[str] = None
     page_start: Optional[int] = None
     page_end: Optional[int] = None
+    page_source: Optional[str] = None
     section_title: Optional[str] = None
     heading_path: list[str] = Field(default_factory=list)
     token_count: int = 0

@@ -16,10 +16,12 @@ class DocumentModel(MongoBaseModel):
     visibility: Literal["global", "private"]
     owner_user_id: Optional[str] = None
     uploaded_in_session_id: Optional[str] = None
+    procedure_title: Optional[str] = None
     status: Literal["uploaded", "processing", "converted", "ready", "failed", "deleted"] = "uploaded"
     raw_storage_path: str
     markdown_storage_path: Optional[str] = None
     page_count: Optional[int] = None
+    page_source: Optional[str] = None
     chunk_count: Optional[int] = None
     file_size_bytes: Optional[int] = None
     content_hash: Optional[str] = None

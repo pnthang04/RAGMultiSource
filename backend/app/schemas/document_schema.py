@@ -24,11 +24,13 @@ class DocumentItem(TimestampedItem):
     source_type: str
     owner_user_id: Optional[str] = None
     uploaded_in_session_id: Optional[str] = None
+    procedure_title: Optional[str] = None
     visibility: str
     raw_storage_path: str
     markdown_storage_path: Optional[str] = None
     status: str
     page_count: Optional[int] = None
+    page_source: Optional[str] = None
     chunk_count: Optional[int] = None
     file_size_bytes: Optional[int] = None
     content_hash: Optional[str] = None

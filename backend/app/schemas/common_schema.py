@@ -9,7 +9,9 @@ class SourceItem(BaseModel):
     chunk_id: str
     filename: str
     source_type: str
+    procedure_title: Optional[str] = None
     page_number: Optional[int] = None
+    page_source: Optional[str] = None
     section_title: Optional[str] = None
     score: Optional[float] = None
     visibility: Optional[str] = None
