@@ -17,3 +17,7 @@ class MessageRepository:
     async def list_session_messages(self, session_id: str) -> list[dict[str, Any]]:
         cursor = self._collection().find({"session_id": session_id}).sort("created_at", 1)
         return [message async for message in cursor]
+
+    async def delete_session_messages(self, session_id: str) -> int:
+        result = await self._collection().delete_many({"session_id": session_id})
+        return result.deleted_count

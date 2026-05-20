@@ -1,12 +1,30 @@
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+from app.models.user import UserModel
 from app.services.chat_service import ChatService
 from app.services.document_service import DocumentService
 from app.services.session_service import SessionService
 from app.services.system_document_service import SystemDocumentService
 from app.services.user_service import UserService
 
+bearer_scheme = HTTPBearer(auto_error=False)
 
-def get_current_user_id() -> str:
-    return "demo_user_001"
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    service: UserService = Depends(get_user_service),
+) -> UserModel:
+    if credentials is None or not credentials.credentials:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    user = await service.get_user_by_token(credentials.credentials)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    return user
+
+
+async def get_current_user_id(current_user: UserModel = Depends(get_current_user)) -> str:
+    return current_user.id
 
 
 def get_document_service() -> DocumentService:

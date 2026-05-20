@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
-from app.api.deps import get_document_service
+from app.api.deps import get_current_user_id, get_document_service
 from app.schemas.convert_schema import DocumentConvertResponse
 from app.schemas.ingestion_job_schema import IngestionJobItem
 from app.schemas.document_schema import DocumentItem, DocumentUploadResponse
@@ -13,12 +13,12 @@ router = APIRouter()
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    owner_user_id: str = Form(...),
     session_id: str | None = Form(default=None),
+    user_id: str = Depends(get_current_user_id),
     service: DocumentService = Depends(get_document_service),
 ):
     try:
-        payload = await service.upload_user_document(file=file, owner_user_id=owner_user_id, session_id=session_id)
+        payload = await service.upload_user_document(file=file, owner_user_id=user_id, session_id=session_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     document = payload["document"]
@@ -34,10 +34,10 @@ async def upload_document(
 
 @router.get("", response_model=list[DocumentItem])
 async def list_documents(
-    owner_user_id: str = Query(...),
+    user_id: str = Depends(get_current_user_id),
     service: DocumentService = Depends(get_document_service),
 ):
-    return await service.list_documents(owner_user_id)
+    return await service.list_documents(user_id)
 
 
 @router.get("/{document_id}", response_model=DocumentItem)

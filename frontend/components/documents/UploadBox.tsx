@@ -13,14 +13,13 @@ export function UploadBox({ onUploaded }: Props) {
   const [dragging, setDragging] = useState(false);
   const [statusText, setStatusText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const ownerUserId = "demo_user_001";
 
   const uploadFile = async (file: File) => {
     if (busy) return;
     setBusy(true);
     setStatusText("Uploading...");
     try {
-      await apiClient.documents.upload(file, ownerUserId);
+      await apiClient.documents.upload(file);
       setStatusText("Done");
       await onUploaded();
       setTimeout(() => setStatusText(""), 1800);

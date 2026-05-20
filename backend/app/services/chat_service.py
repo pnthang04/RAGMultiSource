@@ -12,6 +12,10 @@ class ChatService:
         self.session_service = SessionService()
 
     async def ask_question(self, request, user_id: str):
+        if request.session_id:
+            session = await self.session_service.get_session(request.session_id, user_id)
+            if session is None:
+                raise ValueError("Session not found.")
         result = self.qa_pipeline.run(
             question=request.question,
             user_id=user_id,

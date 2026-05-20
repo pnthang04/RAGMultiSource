@@ -2,32 +2,20 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type PropsWithChildren } from "react";
 
+import { apiClient, setAuthToken } from "@/lib/api-client";
 import type { AuthCredentials, AuthUser } from "@/features/auth/types";
-
-type StoredUser = AuthUser & { password: string };
 
 type AuthContextValue = {
   user: AuthUser | null;
   ready: boolean;
   login: (credentials: AuthCredentials) => Promise<void>;
   register: (credentials: AuthCredentials) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 };
 
-const USERS_KEY = "rag_chatbot_users";
 const CURRENT_KEY = "rag_chatbot_current_user";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-function readUsers(): StoredUser[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(USERS_KEY);
-    return raw ? (JSON.parse(raw) as StoredUser[]) : [];
-  } catch {
-    return [];
-  }
-}
 
 function readCurrentUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
@@ -39,11 +27,8 @@ function readCurrentUser(): AuthUser | null {
   }
 }
 
-function persistUsers(users: StoredUser[]) {
-  window.localStorage.setItem(USERS_KEY, JSON.stringify(users));
-}
-
 function persistCurrentUser(user: AuthUser | null) {
+  if (typeof window === "undefined") return;
   if (user) {
     window.localStorage.setItem(CURRENT_KEY, JSON.stringify(user));
   } else {
@@ -51,16 +36,9 @@ function persistCurrentUser(user: AuthUser | null) {
   }
 }
 
-function toUser(input: StoredUser): AuthUser {
-  return {
-    id: input.id,
-    name: input.name,
-    email: input.email,
-  };
-}
-
-function userIdFromEmail(email: string) {
-  return `user_${email.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+function clearAuth() {
+  setAuthToken(null);
+  persistCurrentUser(null);
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -68,50 +46,58 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    setUser(readCurrentUser());
-    setReady(true);
+    let mounted = true;
+
+    async function bootstrap() {
+      const cachedUser = readCurrentUser();
+      if (cachedUser) {
+        setUser(cachedUser);
+      }
+      try {
+        const me = await apiClient.auth.me();
+        if (!mounted) return;
+        setUser(me);
+        persistCurrentUser(me);
+      } catch {
+        clearAuth();
+        if (mounted) {
+          setUser(null);
+        }
+      } finally {
+        if (mounted) {
+          setReady(true);
+        }
+      }
+    }
+
+    void bootstrap();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const value = useMemo<AuthContextValue>(() => {
     const login = async ({ email, password }: AuthCredentials) => {
-      const users = readUsers();
-      const found = users.find((item) => item.email.toLowerCase() === email.trim().toLowerCase());
-      if (!found || found.password !== password) {
-        throw new Error("Email hoặc mật khẩu không đúng");
-      }
-      const nextUser = toUser(found);
-      setUser(nextUser);
-      persistCurrentUser(nextUser);
+      const response = await apiClient.auth.login({ email, password });
+      setAuthToken(response.token);
+      setUser(response.user);
+      persistCurrentUser(response.user);
     };
 
     const register = async ({ name, email, password }: AuthCredentials) => {
-      const normalizedEmail = email.trim().toLowerCase();
-      const normalizedName = (name || "").trim();
-      if (!normalizedName) {
-        throw new Error("Vui lòng nhập tên");
-      }
-      if (!normalizedEmail || !password) {
-        throw new Error("Thiếu email hoặc mật khẩu");
-      }
-      const users = readUsers();
-      if (users.some((item) => item.email.toLowerCase() === normalizedEmail)) {
-        throw new Error("Email này đã được sử dụng");
-      }
-      const created: StoredUser = {
-        id: userIdFromEmail(normalizedEmail),
-        name: normalizedName,
-        email: normalizedEmail,
-        password,
-      };
-      persistUsers([...users, created]);
-      const nextUser = toUser(created);
-      setUser(nextUser);
-      persistCurrentUser(nextUser);
+      const response = await apiClient.auth.register({ name, email, password });
+      setAuthToken(response.token);
+      setUser(response.user);
+      persistCurrentUser(response.user);
     };
 
-    const logout = () => {
-      setUser(null);
-      persistCurrentUser(null);
+    const logout = async () => {
+      try {
+        await apiClient.auth.logout();
+      } finally {
+        clearAuth();
+        setUser(null);
+      }
     };
 
     return { user, ready, login, register, logout };

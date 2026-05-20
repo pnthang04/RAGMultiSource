@@ -73,6 +73,29 @@ export default function ChatPage() {
     await loadSessionMessages(session.id);
   }
 
+  async function handleEditSession(session: SessionItem) {
+    const nextTitle = window.prompt("Sửa tên phiên chat", session.title || "");
+    if (nextTitle === null) return;
+    const trimmed = nextTitle.trim();
+    const updated = await apiClient.sessions.update(session.id, { title: trimmed || null });
+    setSessions((current) => current.map((item) => (item.id === session.id ? updated : item)));
+  }
+
+  async function handleDeleteSession(session: SessionItem) {
+    const confirmed = window.confirm(`Xóa phiên chat "${session.title || "Phiên chưa đặt tên"}"?`);
+    if (!confirmed) return;
+    await apiClient.sessions.delete(session.id);
+    const nextSessions = await refreshSessions();
+    if (nextSessions.length > 0) {
+      const nextActive = nextSessions[0].id;
+      setActiveSessionId(nextActive);
+      await loadSessionMessages(nextActive);
+    } else {
+      setActiveSessionId(null);
+      setMessages([]);
+    }
+  }
+
   async function handleSend(question: string) {
     const sessionId = await ensureSession();
     setActiveSessionId(sessionId);
@@ -100,8 +123,8 @@ export default function ChatPage() {
   }
 
   async function handleUpload(file: File) {
-    const ownerUserId = user?.id ?? "demo_user_001";
-    await apiClient.documents.upload(file, ownerUserId);
+    const sessionId = activeSessionId ?? undefined;
+    await apiClient.documents.upload(file, sessionId);
   }
 
   useEffect(() => {
@@ -120,11 +143,6 @@ export default function ChatPage() {
           const nextActive = loadedSessions[0].id;
           setActiveSessionId(nextActive);
           await loadSessionMessages(nextActive);
-        } else {
-          const session = await apiClient.sessions.create({});
-          if (!mounted) return;
-          setSessions([session]);
-          setActiveSessionId(session.id);
         }
       } finally {
         if (mounted) {
@@ -175,6 +193,8 @@ export default function ChatPage() {
                     sessions={sessions}
                     activeSessionId={activeSessionId}
                     onSelect={(session) => void handleSelectSession(session)}
+                    onEdit={(session) => void handleEditSession(session)}
+                    onDelete={(session) => void handleDeleteSession(session)}
                   />
                 )}
               </div>
@@ -187,7 +207,7 @@ export default function ChatPage() {
                   <div className="auth-user-name">{user.name}</div>
                   <div className="auth-user-email">{user.email}</div>
                 </div>
-                <button className="auth-user-logout" type="button" onClick={logout}>
+                <button className="auth-user-logout" type="button" onClick={() => void logout()}>
                   Đăng xuất
                 </button>
               </div>

@@ -12,9 +12,7 @@ async def list_session_messages(
     user_id: str = Depends(get_current_user_id),
     service: SessionService = Depends(get_session_service),
 ):
-    messages = await service.list_session_messages(session_id)
-    if not messages:
-        return []
-    if any(message.get("owner_user_id") != user_id for message in messages):
+    messages = await service.list_session_messages(session_id, user_id)
+    if messages is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return messages
