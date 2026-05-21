@@ -1,4 +1,5 @@
 import json
+import math
 from typing import Any
 
 from app.db.chromadb import get_chroma_collection
@@ -37,23 +38,39 @@ class ChromaVectorStore:
         metadatas = [self._to_chroma_metadata(chunk["metadata"]) for chunk in chunks]
         self.collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
 
+    def _cosine_similarity(self, left: list[float], right: list[float]) -> float:
+        if not left or not right:
+            return 0.0
+        dot_product = sum(a * b for a, b in zip(left, right))
+        left_norm = math.sqrt(sum(value * value for value in left))
+        right_norm = math.sqrt(sum(value * value for value in right))
+        if left_norm == 0 or right_norm == 0:
+            return 0.0
+        return dot_product / (left_norm * right_norm)
+
     def search(self, query_embedding: list[float], where_filter: dict[str, Any] | None, top_k: int = 5) -> list[dict[str, Any]]:
         result = self.collection.query(
             query_embeddings=[query_embedding],
             n_results=top_k,
             where=where_filter,
-            include=["documents", "metadatas", "distances"],
+            include=["documents", "metadatas", "distances", "embeddings"],
         )
         items: list[dict[str, Any]] = []
         for idx, chunk_id in enumerate(result["ids"][0] if result.get("ids") else []):
+            chunk_embedding = None
+            if result.get("embeddings") and result["embeddings"][0]:
+                chunk_embedding = result["embeddings"][0][idx]
+            similarity = self._cosine_similarity(query_embedding, chunk_embedding) if chunk_embedding else None
             items.append(
                 {
                     "id": chunk_id,
                     "content": result["documents"][0][idx],
                     "metadata": result["metadatas"][0][idx],
                     "distance": result["distances"][0][idx] if result.get("distances") else None,
+                    "similarity": similarity,
                 }
             )
+        items.sort(key=lambda item: item.get("similarity") if item.get("similarity") is not None else float("-inf"), reverse=True)
         return items
 
     def delete_by_document_id(self, document_id: str) -> None:

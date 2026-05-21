@@ -39,6 +39,7 @@ class QAPipeline:
                 page_number=item["metadata"].get("page_number"),
                 page_source=item["metadata"].get("page_source"),
                 section_title=item["metadata"].get("section_title"),
+                score=item.get("similarity"),
                 visibility=item["metadata"].get("visibility"),
                 owner_user_id=item["metadata"].get("owner_user_id"),
                 session_id=item["metadata"].get("session_id"),

@@ -1,6 +1,7 @@
 import type { ChatRequest, ChatResponse, SessionItem, SessionMessageItem } from "@/features/chat/types";
 import type { AuthCredentials, AuthResponse, AuthUser } from "@/features/auth/types";
 import type { DocumentItem } from "@/features/documents/types";
+import type { DocumentUploadResponse } from "@/features/documents/types";
 
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const AUTH_TOKEN_KEY = "rag_chatbot_auth_token";
@@ -100,7 +101,7 @@ export const apiClient = {
       if (sessionId) {
         formData.append("session_id", sessionId);
       }
-      return request("/documents/upload", { method: "POST", body: formData });
+      return request<DocumentUploadResponse>("/documents/upload", { method: "POST", body: formData });
     },
   },
 };

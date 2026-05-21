@@ -12,6 +12,7 @@ export function ChatInput({ onSend, onUpload, disabled = false }: Props) {
   const [question, setQuestion] = useState("");
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -38,8 +39,15 @@ export function ChatInput({ onSend, onUpload, disabled = false }: Props) {
     const file = event.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setUploadStatus(`Đang tải ${file.name}...`);
     try {
       await onUpload(file);
+      setUploadStatus(`Đã tải ${file.name}`);
+      setTimeout(() => setUploadStatus(""), 2000);
+    } catch (error) {
+      console.error(error);
+      setUploadStatus("Tải file thất bại");
+      setTimeout(() => setUploadStatus(""), 2500);
     } finally {
       setUploading(false);
       event.target.value = "";
@@ -48,13 +56,7 @@ export function ChatInput({ onSend, onUpload, disabled = false }: Props) {
 
   return (
     <form className="chat-composer" onSubmit={(e) => void handleSubmit(e)}>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".pdf,.doc,.docx"
-        hidden
-        onChange={(e) => void handleFileChange(e)}
-      />
+      <input ref={fileInputRef} type="file" accept=".pdf,.docx" hidden onChange={(e) => void handleFileChange(e)} />
 
       <button
         type="button"
@@ -79,6 +81,8 @@ export function ChatInput({ onSend, onUpload, disabled = false }: Props) {
       <button className="composer-send-btn" type="submit" disabled={!question.trim() || sending || disabled}>
         Gửi
       </button>
+
+      {uploadStatus ? <div className="composer-status">{uploadStatus}</div> : null}
     </form>
   );
 }

@@ -5,7 +5,7 @@ export type DocumentItem = {
   file_type: string;
   source_type: string;
   owner_user_id?: string | null;
-  session_id?: string | null;
+  uploaded_in_session_id?: string | null;
   procedure_title?: string | null;
   visibility: string;
   raw_storage_path: string;
@@ -22,7 +22,9 @@ export type DocumentItem = {
 
 export type DocumentUploadResponse = {
   document_id: string;
+  job_id?: string | null;
   filename: string;
   status: string;
+  raw_storage_path?: string;
   message: string;
 };

@@ -47,7 +47,7 @@ export function UploadBox({ onUploaded }: Props) {
     const droppedFile = e.dataTransfer.files?.[0];
     if (droppedFile) {
       const ext = droppedFile.name.split(".").pop()?.toLowerCase();
-      if (ext && ["pdf", "doc", "docx"].includes(ext)) {
+      if (ext && ["pdf", "docx"].includes(ext)) {
         void uploadFile(droppedFile);
       } else {
         setStatusText("Unsupported file");
@@ -74,7 +74,7 @@ export function UploadBox({ onUploaded }: Props) {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.doc,.docx"
+        accept=".pdf,.docx"
         style={{ display: "none" }}
         onChange={handleFileChange}
       />

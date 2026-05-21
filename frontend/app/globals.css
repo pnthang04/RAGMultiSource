@@ -677,6 +677,14 @@ button:disabled {
   transform: none;
 }
 
+.composer-status {
+  grid-column: 1 / -1;
+  margin-top: -2px;
+  padding-left: 56px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .auth-overlay {
   position: fixed;
   inset: 0;
@@ -791,6 +799,10 @@ button:disabled {
 
   .composer-send-btn {
     grid-column: 1 / -1;
+  }
+
+  .composer-status {
+    padding-left: 0;
   }
 
   .auth-card {

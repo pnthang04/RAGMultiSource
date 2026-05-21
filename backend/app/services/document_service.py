@@ -92,16 +92,23 @@ class DocumentService:
         }
 
     async def list_documents(self, owner_user_id: str | None = None):
-        documents = await self.document_repository.list_documents(owner_user_id)
+        documents = await self.document_repository.list_user_documents(owner_user_id) if owner_user_id else []
         return [self._serialize_document(document) for document in documents]
 
-    async def get_document(self, document_id: str):
+    async def get_document(self, document_id: str, owner_user_id: str | None = None):
         document = await self.document_repository.get_document_by_id(document_id)
         if document is None:
             return None
+        if owner_user_id is not None and document.get("owner_user_id") != owner_user_id:
+            return None
         return self._serialize_document(document)
 
-    async def list_ingestion_jobs(self, document_id: str) -> list[dict]:
+    async def list_ingestion_jobs(self, document_id: str, owner_user_id: str | None = None) -> list[dict] | None:
+        document = await self.document_repository.get_document_by_id(document_id)
+        if document is None:
+            return None
+        if owner_user_id is not None and document.get("owner_user_id") != owner_user_id:
+            return None
         jobs = await self.ingestion_job_repository.list_jobs_by_document_id(document_id)
         return [
             {
@@ -123,9 +130,11 @@ class DocumentService:
             for job in jobs
         ]
 
-    async def delete_document(self, document_id: str) -> bool:
+    async def delete_document(self, document_id: str, owner_user_id: str | None = None) -> bool:
         document = await self.document_repository.get_document_by_id(document_id)
         if document is None:
+            return False
+        if owner_user_id is not None and document.get("owner_user_id") != owner_user_id:
             return False
 
         raw_storage_path = document.get("raw_storage_path")
@@ -151,6 +160,7 @@ class DocumentService:
 
         await self.document_repository.soft_delete_document(document_id)
         return True
+
 
     def _serialize_document(self, document: dict) -> dict:
         return {

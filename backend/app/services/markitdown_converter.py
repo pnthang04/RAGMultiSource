@@ -46,9 +46,11 @@ class MarkItDownConversionService:
         rel_path = settings.markdown_dir_path / source_type / owner_folder / document_id / "document.md"
         return rel_path.as_posix()
 
-    async def convert_document(self, document_id: str) -> dict:
+    async def convert_document(self, document_id: str, owner_user_id: str | None = None) -> dict:
         document = await self.document_repository.get_document_by_id(document_id)
         if document is None:
+            raise ValueError("Document not found")
+        if owner_user_id is not None and document.get("owner_user_id") != owner_user_id:
             raise ValueError("Document not found")
 
         raw_storage_path = document.get("raw_storage_path")

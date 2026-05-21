@@ -123,7 +123,7 @@ export default function ChatPage() {
   }
 
   async function handleUpload(file: File) {
-    const sessionId = activeSessionId ?? undefined;
+    const sessionId = await ensureSession();
     await apiClient.documents.upload(file, sessionId);
   }
 
