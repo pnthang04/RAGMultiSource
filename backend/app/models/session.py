@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import Field
 
@@ -11,6 +11,7 @@ class SessionModel(MongoBaseModel):
     owner_user_id: str
     title: Optional[str] = None
     description: Optional[str] = None
+    conversation_state: dict[str, Any] = Field(default_factory=dict)
     last_message_at: Optional[datetime] = None
     status: Literal["active", "archived", "deleted"] = "active"
     created_at: datetime = Field(default_factory=datetime.utcnow)

@@ -125,6 +125,7 @@ class IngestionPipeline:
                 "filename": document.filename,
                 "procedure_title": procedure_title,
                 "visibility": document.visibility,
+                "uploaded_at": document.created_at.isoformat(),
             }
             if self._is_user_upload(document):
                 chunks = self.user_upload_chunker.chunk(markdown_text, base_metadata)
@@ -143,6 +144,7 @@ class IngestionPipeline:
                     "filename": document.filename,
                     "procedure_title": procedure_title,
                     "visibility": document.visibility,
+                    "uploaded_at": document.created_at.isoformat(),
                     "page_number": chunk.get("page_number"),
                     "page_start": chunk.get("page_start"),
                     "page_end": chunk.get("page_end"),

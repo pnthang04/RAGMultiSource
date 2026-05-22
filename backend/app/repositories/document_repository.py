@@ -29,6 +29,46 @@ class DocumentRepository:
     async def list_user_documents(self, user_id: str) -> list[dict[str, Any]]:
         return await self.list_documents(owner_user_id=user_id)
 
+    async def list_user_documents_by_session(self, user_id: str, session_id: str) -> list[dict[str, Any]]:
+        cursor = self._collection().find(
+            {
+                "owner_user_id": user_id,
+                "uploaded_in_session_id": session_id,
+                "status": {"$ne": "deleted"},
+            }
+        ).sort("created_at", -1)
+        return [doc async for doc in cursor]
+
+    async def list_user_ready_documents(self, user_id: str) -> list[dict[str, Any]]:
+        cursor = self._collection().find(
+            {
+                "owner_user_id": user_id,
+                "status": {"$ne": "deleted"},
+            }
+        ).sort("created_at", -1)
+        return [doc async for doc in cursor]
+
+    async def find_user_documents_by_filename(self, user_id: str, filename: str) -> list[dict[str, Any]]:
+        cursor = self._collection().find(
+            {
+                "owner_user_id": user_id,
+                "filename": filename,
+                "status": {"$ne": "deleted"},
+            }
+        ).sort("created_at", -1)
+        return [doc async for doc in cursor]
+
+    async def find_system_documents_by_procedure_title(self, procedure_title: str) -> list[dict[str, Any]]:
+        cursor = self._collection().find(
+            {
+                "source_type": "system",
+                "visibility": "global",
+                "procedure_title": procedure_title,
+                "status": {"$ne": "deleted"},
+            }
+        ).sort("created_at", -1)
+        return [doc async for doc in cursor]
+
     async def update_document_status(self, document_id: str, status: str) -> None:
         await self._collection().update_one(
             {"_id": document_id},

@@ -13,6 +13,7 @@ def _to_session_response(session: dict) -> SessionResponse:
         owner_user_id=session["owner_user_id"],
         title=session.get("title"),
         description=session.get("description"),
+        conversation_state=session.get("conversation_state") or {},
         status=session.get("status", "active"),
         last_message_at=session.get("last_message_at"),
         created_at=session.get("created_at"),

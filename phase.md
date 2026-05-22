@@ -15,29 +15,42 @@
 - **5. Hỗ trợ cả tài liệu hệ thống và tài liệu upload**  
   Đã có nền tảng xử lý cho hai nhóm tài liệu chính của project: document hệ thống và document người dùng upload.
 
+- **6. Hoàn thiện bước Scope Resolver**  
+  Đã làm xong bước xác định scope truy xuất trước khi search vector. Hệ thống có thể phân loại query thành tài liệu hệ thống, thủ tục hệ thống, file vừa upload, file cũ của user, file theo tên, câu hỏi so sánh, câu hỏi chung và câu hỏi cần làm rõ. Đồng thời đã gắn metadata filter tương ứng và có test cho các case chính.
+
+- **7. Hoàn thiện bước Document Resolver**  
+  Đã thêm module `DocumentResolver` trong `backend/app/rag/retrieval/resolvers/` để xác định document cụ thể trước khi retrieve. Resolver hiện hỗ trợ file trong session hiện tại, file theo tên, thủ tục hệ thống theo `procedure_title`, tài liệu user đã upload trước đó và document được chọn trực tiếp.
+
+- **8. Bổ sung Conversation State**  
+  Đã thêm `conversation_state` vào session để lưu `current_user_id`, `current_session_id`, `active_document_ids`, `current_session_docs`, `last_scope`, `last_sources`, `last_filename`, `last_procedure_title` và `last_referenced_doc`.
+
+- **9. Bắt buộc metadata filter khi retrieve**  
+  Pipeline hiện đi qua `ScopeResolver` và `DocumentResolver` trước khi search vector. Filter cuối cùng có thể thu hẹp theo `document_id`, `source_type`, `owner_user_id`, `session_id`, `visibility`, `filename`, `procedure_title`; chunk metadata mới cũng có thêm `uploaded_at`.
+
+- **10. Lưu `last_referenced_doc` cho câu hỏi follow-up**  
+  Sau mỗi câu trả lời, hệ thống cập nhật conversation state bằng document/source vừa dùng để các câu hỏi nối tiếp có thể dùng lại đúng scope và đúng document.
+
 ---
 
-## Các chức năng cần phải làm hiện tại
 
-Hiện tại chưa xong công việc nào.
 
 ## Kế hoạch các đầu việc còn lại
 
 ### Giai đoạn 1: Hoàn thiện truy xuất đúng tài liệu
 
-- **1. Làm Scope Resolver**  
+- **1. Làm Scope Resolver - Đã hoàn thành**  
   Xác định query này cần tìm trong: file vừa upload, file trong session hiện tại, file cũ của user, tài liệu hệ thống, hoặc mixed.
 
-- **2. Làm Document Resolver**  
+- **2. Làm Document Resolver - Đã hoàn thành**  
   Xác định đúng document cụ thể trước khi retrieve chunk, ví dụ: "file này", "file hôm qua", "tài liệu lần trước", "file vừa upload".
 
-- **3. Bổ sung Conversation State**  
+- **3. Bổ sung Conversation State - Đã hoàn thành**  
   Lưu session hiện tại, danh sách file đã upload, document vừa dùng, scope vừa dùng, `last_referenced_doc`, `last_scope`, `last_sources`, `current_session_docs` để hỗ trợ hỏi tiếp.
 
-- **4. Bắt buộc metadata filter khi retrieve**  
+- **4. Bắt buộc metadata filter khi retrieve - Đã hoàn thành**  
   Không search toàn bộ vector DB. Cần filter theo `document_id`, `source_type`, `owner_user_id`, `session_id`, `visibility`, `uploaded_at` để đảm bảo đúng ngữ cảnh và đúng quyền.
 
-- **5. Lưu `last_referenced_doc` cho câu hỏi follow-up**  
+- **5. Lưu `last_referenced_doc` cho câu hỏi follow-up - Đã hoàn thành**  
   Sau mỗi lượt trả lời, lưu lại document vừa dùng để hỗ trợ các câu hỏi nối tiếp như "thế thời hạn bao lâu?" hoặc "còn lệ phí thì sao?".
 
 ### Giai đoạn 2: Hoàn thiện truy vấn và câu trả lời

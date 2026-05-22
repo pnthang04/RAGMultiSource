@@ -17,6 +17,7 @@ class SessionService:
             "owner_user_id": session.get("owner_user_id"),
             "title": session.get("title"),
             "description": session.get("description"),
+            "conversation_state": session.get("conversation_state") or {},
             "status": session.get("status", "active"),
             "last_message_at": session.get("last_message_at"),
             "created_at": session.get("created_at"),
@@ -75,3 +76,6 @@ class SessionService:
 
     async def touch_session(self, session_id: str) -> None:
         await self.session_repository.touch_session(session_id)
+
+    async def update_conversation_state(self, session_id: str, state: dict[str, Any]) -> None:
+        await self.session_repository.update_session(session_id, conversation_state=state)

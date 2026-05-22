@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SessionCreateRequest(BaseModel):
@@ -20,6 +20,7 @@ class SessionResponse(BaseModel):
     owner_user_id: str
     title: Optional[str] = None
     description: Optional[str] = None
+    conversation_state: dict[str, Any] = Field(default_factory=dict)
     status: str = "active"
     last_message_at: Optional[datetime] = None
     created_at: Optional[datetime] = None

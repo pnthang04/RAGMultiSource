@@ -4,9 +4,10 @@ from app.core.constants import (
     RETRIEVAL_SCOPE_HYBRID_SYSTEM_AND_USER,
     RETRIEVAL_SCOPE_SYSTEM_DOCS,
     RETRIEVAL_SCOPE_SYSTEM_PROCEDURE,
+    RETRIEVAL_SCOPE_USER_ALL_UPLOADS,
     RETRIEVAL_SCOPE_USER_FILE_NAME,
 )
-from app.rag.retrieval.scope_resolver import ScopeResolver
+from app.rag.retrieval.resolvers import ScopeResolver
 
 
 def test_resolve_system_procedure_scope():
@@ -53,6 +54,19 @@ def test_resolve_file_name_scope():
     assert resolution.metadata_filter["filename"] == "hoc_phi_2024.pdf"
 
 
+def test_resolve_user_all_uploads_scope():
+    resolver = ScopeResolver()
+
+    resolution = resolver.resolve(
+        question="Tai lieu lan truoc toi upload noi gi?",
+        user_id="user_1",
+    )
+
+    assert resolution.scope == RETRIEVAL_SCOPE_USER_ALL_UPLOADS
+    assert resolution.metadata_filter["source_type"] == "user_upload"
+    assert resolution.metadata_filter["owner_user_id"] == "user_1"
+
+
 def test_resolve_compare_scope():
     resolver = ScopeResolver()
 
@@ -93,3 +107,22 @@ def test_resolve_follow_up_uses_last_scope():
 
     assert resolution.scope == RETRIEVAL_SCOPE_SYSTEM_DOCS
     assert resolution.should_retrieve is True
+
+
+def test_resolve_follow_up_uses_last_filename():
+    resolver = ScopeResolver()
+
+    resolution = resolver.resolve(
+        question="Con le phi thi sao?",
+        user_id="user_1",
+        conversation_state={
+            "last_scope": RETRIEVAL_SCOPE_USER_FILE_NAME,
+            "last_procedure_title": None,
+            "last_filename": "hoc_phi_2024.pdf",
+        },
+    )
+
+    assert resolution.scope == RETRIEVAL_SCOPE_USER_FILE_NAME
+    assert resolution.metadata_filter["source_type"] == "user_upload"
+    assert resolution.metadata_filter["owner_user_id"] == "user_1"
+    assert resolution.metadata_filter["filename"] == "hoc_phi_2024.pdf"
