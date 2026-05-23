@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
+
+from app.core.config import settings
 
 
 INTENT_ASK_QUESTION = "ask_question"
 INTENT_SUMMARIZE_DOCUMENT = "summarize_document"
 INTENT_COMPARE_DOCUMENTS = "compare_documents"
 INTENT_FIND_INFORMATION = "find_information"
-INTENT_FOLLOW_UP = "follow_up"
 INTENT_GENERAL_QUERY = "general_query"
 INTENT_NEED_CLARIFICATION = "need_clarification"
 
@@ -55,19 +61,43 @@ class IntentRouter:
         "thoi han",
         "giay to",
     )
-    _follow_up_terms = (
-        "the",
-        "con",
-        "vay",
-        "thi sao",
-        "no",
-        "cai do",
-        "tai lieu nay",
-        "tai lieu do",
-        "thu tuc nay",
-        "file nay",
-    )
     _ambiguous_terms = ("tai lieu do", "file do", "van ban do", "cai do")
+
+    def __init__(self) -> None:
+        self.chain = None
+        if settings.INTENT_ROUTER_USE_LLM and settings.OPENROUTER_API_KEY:
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        (
+                            "Bạn là Intent Router cho hệ thống RAG tiếng Việt.\n"
+                            "Input đã được rewrite nếu là follow-up, nên không dùng intent follow_up.\n"
+                            "Chỉ chọn một intent chính: ask_question, summarize_document, compare_documents, "
+                            "find_information, general_query, need_clarification.\n"
+                            "answer_style chỉ chọn: short_answer, bullet_list, summary, comparison, steps.\n"
+                            "needs_retrieval=false cho general_query hoặc need_clarification.\n"
+                            "Trả về JSON hợp lệ, không markdown, không giải thích.\n"
+                            "Schema: {\"intent\":\"...\",\"answer_style\":\"...\",\"needs_retrieval\":true,"
+                            "\"confidence\":0.0,\"reason\":\"...\"}"
+                        ),
+                    ),
+                    ("human", "Query: {question}"),
+                ]
+            )
+            default_headers = {}
+            if settings.OPENROUTER_SITE_URL:
+                default_headers["HTTP-Referer"] = settings.OPENROUTER_SITE_URL
+            if settings.OPENROUTER_APP_NAME:
+                default_headers["X-Title"] = settings.OPENROUTER_APP_NAME
+            llm = ChatOpenAI(
+                model=settings.OPENROUTER_INTENT_MODEL,
+                api_key=settings.OPENROUTER_API_KEY,
+                base_url=settings.OPENROUTER_BASE_URL,
+                temperature=0,
+                default_headers=default_headers or None,
+            )
+            self.chain = prompt | llm | StrOutputParser()
 
     def _contains_any(self, text: str, terms: tuple[str, ...]) -> bool:
         return any(term in text for term in terms)
@@ -83,37 +113,61 @@ class IntentRouter:
             return ANSWER_STYLE_BULLET_LIST
         return ANSWER_STYLE_SHORT
 
-    def route(self, question: str, conversation_state: dict[str, Any] | None = None) -> IntentResolution:
+    def _route_with_llm(self, question: str) -> IntentResolution | None:
+        if self.chain is None:
+            return None
+        try:
+            raw = self.chain.invoke({"question": question}).strip()
+            if raw.startswith("```"):
+                raw = raw.strip("`")
+                raw = raw.removeprefix("json").strip()
+            payload = json.loads(raw)
+        except Exception:
+            return None
+
+        allowed_intents = {
+            INTENT_ASK_QUESTION,
+            INTENT_SUMMARIZE_DOCUMENT,
+            INTENT_COMPARE_DOCUMENTS,
+            INTENT_FIND_INFORMATION,
+            INTENT_GENERAL_QUERY,
+            INTENT_NEED_CLARIFICATION,
+        }
+        intent = payload.get("intent")
+        if intent not in allowed_intents:
+            return None
+        answer_style = payload.get("answer_style") or ANSWER_STYLE_SHORT
+        if answer_style not in {
+            ANSWER_STYLE_SHORT,
+            ANSWER_STYLE_BULLET_LIST,
+            ANSWER_STYLE_SUMMARY,
+            ANSWER_STYLE_COMPARISON,
+            ANSWER_STYLE_STEPS,
+        }:
+            answer_style = ANSWER_STYLE_SHORT
+        return IntentResolution(
+            intent=intent,
+            answer_style=answer_style,
+            is_follow_up=False,
+            needs_retrieval=bool(payload.get("needs_retrieval", intent not in {INTENT_GENERAL_QUERY, INTENT_NEED_CLARIFICATION})),
+            confidence=float(payload.get("confidence", 0.75)),
+            matched_rules=["llm_intent_router"],
+            reason=payload.get("reason") or "Resolved by OpenRouter intent router.",
+        )
+
+    def _route_by_rules(self, question: str, conversation_state: dict[str, Any] | None = None) -> IntentResolution:
         conversation_state = conversation_state or {}
         text = _normalize_text(question)
         matched_rules: list[str] = []
-        has_state = bool(
-            conversation_state.get("last_scope")
-            or conversation_state.get("last_referenced_doc")
-            or conversation_state.get("last_filename")
-            or conversation_state.get("last_procedure_title")
-        )
+        _ = conversation_state
 
-        if self._contains_any(text, self._ambiguous_terms) and not has_state:
+        if self._contains_any(text, self._ambiguous_terms):
             return IntentResolution(
                 intent=INTENT_NEED_CLARIFICATION,
                 needs_retrieval=False,
                 confidence=0.9,
                 matched_rules=["ambiguous_reference_without_state"],
                 reason="Question references a document ambiguously without conversation state.",
-            )
-
-        if has_state and (len(text.split()) <= 6 or self._contains_any(text, self._follow_up_terms)):
-            matched_rules.append("follow_up")
-            intent = INTENT_FOLLOW_UP
-            return IntentResolution(
-                intent=intent,
-                answer_style=self._answer_style(text, intent),
-                is_follow_up=True,
-                needs_retrieval=True,
-                confidence=0.86,
-                matched_rules=matched_rules,
-                reason="Question depends on previous document context.",
             )
 
         if any(term in text for term in ("so sanh", "doi chieu", "khac nhau", "giong nhau", "dap ung")):
@@ -146,3 +200,9 @@ class IntentRouter:
             matched_rules=matched_rules,
             reason="Resolved by deterministic query rules.",
         )
+
+    def route(self, question: str, conversation_state: dict[str, Any] | None = None) -> IntentResolution:
+        llm_result = self._route_with_llm(question)
+        if llm_result is not None:
+            return llm_result
+        return self._route_by_rules(question, conversation_state=conversation_state)

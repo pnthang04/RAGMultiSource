@@ -8,8 +8,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
-from app.rag.query.intent_router import INTENT_FOLLOW_UP
 from app.utils.text_utils import count_tokens_rough
+
+
+REWRITE_INTENT_FOLLOW_UP = "follow_up"
 
 
 @dataclass
@@ -135,7 +137,7 @@ class QueryRewriter:
         conversation_state: dict[str, Any] | None = None,
     ) -> QueryRewrite:
         conversation_state = conversation_state or {}
-        if intent_resolution.get("intent") != INTENT_FOLLOW_UP:
+        if intent_resolution.get("intent") != REWRITE_INTENT_FOLLOW_UP:
             return QueryRewrite(
                 original_question=question,
                 rewritten_question=question,

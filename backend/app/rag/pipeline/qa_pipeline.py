@@ -2,7 +2,7 @@ from app.core.constants import RETRIEVAL_SCOPE_AUTO, RETRIEVAL_SCOPE_NEED_CLARIF
 from app.rag.generation.openai_llm import OpenAILLMService
 from app.rag.generation.source_formatter import SourceFormatter
 from app.rag.query import IntentRouter
-from app.rag.rewrite import QueryRewriter
+from app.rag.rewrite import QueryRewrite, QueryRewriter, RewriteGate
 from app.rag.retrieval.context_validator import FALLBACK_NO_CONTEXT, ContextValidator
 from app.rag.retrieval.resolvers import DocumentResolver, ScopeResolver
 from app.rag.retrieval.retriever import Retriever
@@ -13,6 +13,7 @@ from langsmith import traceable
 
 class QAPipeline:
     def __init__(self) -> None:
+        self.rewrite_gate = RewriteGate()
         self.intent_router = IntentRouter()
         self.scope_resolver = ScopeResolver()
         self.document_resolver = DocumentResolver()
@@ -45,15 +46,26 @@ class QAPipeline:
         conversation_state: dict | None = None,
     ) -> dict:
         conversation_state = conversation_state or {}
-        intent_resolution = self.intent_router.route(question=question, conversation_state=conversation_state)
-        query_rewrite = self.query_rewriter.rewrite_after_intent(
-            question=question,
-            intent_resolution=intent_resolution.model_dump(),
-            conversation_state=conversation_state,
-        )
-        routing_question = query_rewrite.rewritten_question
+        rewrite_gate = self.rewrite_gate.decide(original_query=question, conversation_state=conversation_state)
+        if rewrite_gate.needs_rewrite:
+            query_rewrite = self.query_rewriter.rewrite_after_intent(
+                question=question,
+                intent_resolution={"intent": "follow_up", "is_follow_up": True},
+                conversation_state=conversation_state,
+            )
+        else:
+            query_rewrite = QueryRewrite(
+                original_question=question,
+                rewritten_question=question,
+                was_rewritten=False,
+                reason="Rewrite gate decided query does not need rewrite.",
+                stage="pre_intent_gate",
+                used_llm=False,
+            )
+        final_query = query_rewrite.rewritten_question
+        intent_resolution = self.intent_router.route(question=final_query, conversation_state=conversation_state)
         resolution = self.scope_resolver.resolve(
-            question=routing_question,
+            question=final_query,
             user_id=user_id,
             session_id=session_id,
             scope=scope if scope != RETRIEVAL_SCOPE_AUTO else RETRIEVAL_SCOPE_AUTO,
@@ -142,6 +154,7 @@ class QAPipeline:
             "intent_resolution": intent_resolution.model_dump(),
             "scope_resolution": resolution.model_dump(),
             "document_resolution": document_resolution.model_dump(),
+            "rewrite_gate": rewrite_gate.model_dump(),
             "query_rewrite": query_rewrite.model_dump(),
             "retrieval_plan": retrieval_plan.model_dump(),
             "context_validation": context_validation.model_dump(),

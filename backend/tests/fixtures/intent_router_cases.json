@@ -28,15 +28,11 @@
     "expected_needs_retrieval": true
   },
   {
-    "id": "follow_up",
-    "question": "Còn thời hạn thì sao?",
-    "conversation_state": {
-      "last_scope": "system_procedure",
-      "last_procedure_title": "Đăng ký thành lập doanh nghiệp tư nhân"
-    },
-    "expected_intent": "follow_up",
+    "id": "rewritten_follow_up_becomes_real_intent",
+    "question": "Trong thủ tục đăng ký thành lập doanh nghiệp tư nhân, thời hạn giải quyết là bao lâu?",
+    "expected_intent": "ask_question",
     "expected_needs_retrieval": true,
-    "expected_is_follow_up": true
+    "expected_is_follow_up": false
   },
   {
     "id": "general_query",
