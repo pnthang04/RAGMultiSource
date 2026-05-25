@@ -5,7 +5,9 @@ Create a test document for the user by cloning a system document
 import asyncio
 import sys
 from datetime import datetime
-sys.path.insert(0, 'd:\\Project\\Chatbot\\backend')
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.repositories.document_repository import DocumentRepository
 from app.models.document import DocumentModel

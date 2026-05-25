@@ -1,7 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import re
-import unicodedata
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -22,35 +21,20 @@ from app.core.constants import (
     SOURCE_TYPE_USER_UPLOAD,
     VISIBILITY_GLOBAL,
 )
-
-
-def _normalize_text(text: str) -> str:
-    normalized = unicodedata.normalize("NFKD", text.lower())
-    stripped = "".join(char for char in normalized if not unicodedata.combining(char))
-    stripped = stripped.replace("đ", "d")
-    return re.sub(r"\s+", " ", stripped).strip()
-
-
-def _strip_quotes(value: str) -> str:
-    return value.strip(" \t\r\n\"'“”‘’`")
-
-
-def _and(*conditions: dict[str, Any]) -> dict[str, Any]:
-    clean_conditions = [condition for condition in conditions if condition]
-    if not clean_conditions:
-        return {}
-    if len(clean_conditions) == 1:
-        return clean_conditions[0]
-    return {"$and": clean_conditions}
-
-
-def _or(*conditions: dict[str, Any]) -> dict[str, Any]:
-    clean_conditions = [condition for condition in conditions if condition]
-    if not clean_conditions:
-        return {}
-    if len(clean_conditions) == 1:
-        return clean_conditions[0]
-    return {"$or": clean_conditions}
+from app.rag.retrieval.resolvers.scope_resolver_patterns import (
+    AMBIGUOUS_DOCUMENT_PATTERNS,
+    COMPARE_PATTERNS,
+    CURRENT_UPLOAD_PATTERNS,
+    FILENAME_PATTERN,
+    FOLLOW_UP_PATTERNS,
+    PROCEDURE_INTENT_TAIL_PATTERN,
+    SYSTEM_GENERAL_PATTERNS,
+    USER_HISTORY_PATTERNS,
+    _and,
+    _normalize_text,
+    _or,
+    _strip_quotes,
+)
 
 
 @dataclass
@@ -68,100 +52,14 @@ class ScopeResolution:
 
 
 class ScopeResolver:
-    _current_upload_patterns = (
-        "file nay",
-        "tai lieu nay",
-        "file vua upload",
-        "tai lieu vua upload",
-        "file moi upload",
-        "file vua tai len",
-        "tai lieu vua tai len",
-        "tai lieu hien tai",
-        "trong session nay",
-        "session nay",
-    )
-    _ambiguous_document_patterns = (
-        "file do",
-        "tai lieu do",
-        "van ban do",
-        "noi dung do",
-        "cai do",
-    )
-    _user_history_patterns = (
-        "file cu",
-        "file toi upload truoc do",
-        "file da upload",
-        "tai lieu lan truoc",
-        "hom qua toi upload",
-        "tai lieu da tai len",
-        "file truoc do",
-    )
-    _compare_patterns = (
-        "so sanh",
-        "doi chieu",
-        "khac nhau",
-        "giong nhau",
-        "dap ung",
-        "doi voi file cua toi",
-    )
-    _system_general_patterns = (
-        "thu tuc",
-        "quy trinh",
-        "ho so",
-        "quy dinh",
-        "quy che",
-        "thong tu",
-        "nghi dinh",
-        "quyet dinh",
-    )
-    _follow_up_patterns = (
-        "the",
-        "con",
-        "vay",
-        "thi sao",
-        "bao lau",
-        "le phi",
-        "chi phi",
-        "phi",
-        "tiep theo",
-        "phia tren",
-        "no",
-        "noi do",
-        "muc do",
-    )
-    _filename_pattern = re.compile(
-        r"""(?ix)
-        (?:
-            (?:file|tai\s+lieu|document)\s*
-            (?:nay|nay\s+co|co\s+ten|ten\s+la|la)?\s*
-            (?:[:\-]\s*)?
-        )?
-        ["'“”‘’`]?
-        (?P<filename>[a-z0-9][a-z0-9_\-\s().\[\]]*\.(?:pdf|docx?|xlsx?|pptx?|txt|md))
-        ["'“”‘’`]?
-        """
-    )
-    _procedure_intent_tail_pattern = re.compile(
-        r"""(?ix)
-        \s*
-        (?:
-            can\s+(?:ho\s+so(?:\s+gi)?|giay\s+to(?:\s+gi)?|nhung\s+gi|gi)|
-            gom\s+(?:nhung\s+gi|gi)|
-            co\s+(?:nhung\s+gi|gi)|
-            thoi\s+han\s+(?:bao\s+lau|la\s+bao\s+lau|giai\s+quyet\s+bao\s+lau)|
-            le\s+phi\s+(?:bao\s+nhieu|la\s+bao\s+nhieu|thi\s+sao)|
-            phi\s+(?:bao\s+nhieu|la\s+bao\s+nhieu|thi\s+sao)|
-            mat\s+bao\s+lau|
-            xu\s+ly\s+bao\s+lau|
-            la\s+gi|
-            nhu\s+the\s+nao|
-            ra\s+sao|
-            o\s+dau|
-            nao
-        )
-        \s*\??\s*$
-        """
-    )
+    _current_upload_patterns = CURRENT_UPLOAD_PATTERNS
+    _ambiguous_document_patterns = AMBIGUOUS_DOCUMENT_PATTERNS
+    _user_history_patterns = USER_HISTORY_PATTERNS
+    _compare_patterns = COMPARE_PATTERNS
+    _system_general_patterns = SYSTEM_GENERAL_PATTERNS
+    _follow_up_patterns = FOLLOW_UP_PATTERNS
+    _filename_pattern = FILENAME_PATTERN
+    _procedure_intent_tail_pattern = PROCEDURE_INTENT_TAIL_PATTERN
 
     def _contains_any(self, text: str, patterns: tuple[str, ...]) -> bool:
         return any(pattern in text for pattern in patterns)
@@ -386,3 +284,6 @@ class ScopeResolver:
             matched_rules=matched_rules,
             reason=reason,
         )
+
+
+

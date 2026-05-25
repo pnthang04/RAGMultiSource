@@ -3,7 +3,9 @@
 Get the latest trace to debug the pipeline
 """
 import sys
-sys.path.insert(0, 'd:\\Project\\Chatbot\\backend')
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.scripts.read_langsmith_traces import list_traces
 

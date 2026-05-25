@@ -2,11 +2,14 @@ import asyncio
 import json
 import shutil
 import traceback
+import sys
 from io import BytesIO
 from pathlib import Path
 
 from docx import Document
 from starlette.datastructures import UploadFile
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.db.mongodb import get_database, get_mongo_client
 from app.rag.vectorstore.chroma_store import ChromaVectorStore
@@ -21,7 +24,7 @@ from app.workers.ingestion_worker import IngestionWorker
 PREFIX = "manual_e2e_rag"
 EMAIL = f"{PREFIX}@example.test"
 PASSWORD = "Password123!"
-LOG_PATH = Path("manual_e2e_rag_check.log")
+LOG_PATH = Path(__file__).resolve().with_name("manual_e2e_rag_check.log")
 
 
 def log_step(message: str) -> None:

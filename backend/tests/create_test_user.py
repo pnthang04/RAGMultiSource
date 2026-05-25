@@ -4,7 +4,9 @@ Get or create a test user and get auth token for testing
 """
 import asyncio
 import sys
-sys.path.insert(0, 'd:\\Project\\Chatbot\\backend')
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.services.user_service import UserService
 
