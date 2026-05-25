@@ -43,7 +43,6 @@ User Query
 -> rewrite_query_node neu can
 -> use_original_query_node neu khong can rewrite
 -> intent_router_node
--> retrieval_planner_node
 -> scope_resolver_node
 -> neu should_reuse_last_filter=true: build_filter_node
 -> neu should_reuse_last_filter=false: document_resolver_node
@@ -64,7 +63,6 @@ Chi tiet flow va thiet ke node nam trong [pipeline.md](./pipeline.md).
 - `rewrite_detector_node`: quyet dinh query co can rewrite khong.
 - `rewrite_query_node`: rewrite follow-up/mo ho thanh standalone query.
 - `intent_router_node`: phan loai user muon lam gi, vi du `ask_question`, `compare_documents`, `general_query`.
-- `retrieval_planner_node`: fast path, de xuat action so bo.
 - `scope_resolver_node`: state-aware + LLM structured output de xac nhan scope cuoi.
 - `document_resolver_node`: resolve document/procedure bang MongoDB metadata.
 - `candidate_selector_node`: chon document candidate neu du chac, hoi lai neu mo ho.

@@ -61,6 +61,11 @@ class IntentRouter:
         "le phi",
         "thoi han",
         "giay to",
+        "trinh tu",
+        "cach thuc",
+        "thuc hien",
+        "nop ho so",
+        "co quan",
     )
     _ambiguous_terms = ("tai lieu do", "file do", "van ban do", "cai do")
 
@@ -72,13 +77,15 @@ class IntentRouter:
                     (
                         "system",
                         (
-                            "Bạn là Intent Router cho hệ thống RAG tiếng Việt.\n"
-                            "Input đã được rewrite nếu là follow-up, nên không dùng intent follow_up.\n"
-                            "Chỉ chọn một intent chính: ask_question, summarize_document, compare_documents, "
+                            "You are an intent router for a Vietnamese administrative-document RAG system.\n"
+                            "Choose exactly one intent: ask_question, summarize_document, compare_documents, "
                             "find_information, general_query, need_clarification, unsupported.\n"
-                            "answer_style chỉ chọn: short_answer, bullet_list, summary, comparison, steps.\n"
-                            "needs_retrieval=false cho general_query, need_clarification hoặc unsupported.\n"
-                            "Trả về JSON hợp lệ, không markdown, không giải thích.\n"
+                            "Choose answer_style: short_answer, bullet_list, summary, comparison, steps.\n"
+                            "Use needs_retrieval=true for questions about administrative procedures, documents, fees, "
+                            "deadlines, dossiers, required papers, regulations, uploaded files, or system documents.\n"
+                            "Use general_query only for greetings or questions about the chatbot itself.\n"
+                            "Do not use a follow_up intent; the query was already rewritten when needed.\n"
+                            "Return valid JSON only, no markdown, no explanation.\n"
                             "Schema: {\"intent\":\"...\",\"answer_style\":\"...\",\"needs_retrieval\":true,"
                             "\"confidence\":0.0,\"reason\":\"...\"}"
                         ),
@@ -213,7 +220,20 @@ class IntentRouter:
         )
 
     def route(self, question: str, conversation_state: dict[str, Any] | None = None) -> IntentResolution:
+        rule_result = self._route_by_rules(question, conversation_state=conversation_state)
         llm_result = self._route_with_llm(question)
-        if llm_result is not None:
-            return llm_result
-        return self._route_by_rules(question, conversation_state=conversation_state)
+        if llm_result is None:
+            return rule_result
+
+        # Deterministic rules are the safety rail: never let the LLM classify a
+        # clear administrative/document question as a non-retrieval query.
+        if rule_result.needs_retrieval and not llm_result.needs_retrieval:
+            rule_result.matched_rules.append("llm_false_negative_guard")
+            rule_result.reason = "Rule-based guard kept a document/admin question in the RAG path."
+            return rule_result
+
+        if llm_result.confidence < 0.7 and rule_result.confidence >= llm_result.confidence:
+            rule_result.matched_rules.append("low_confidence_llm_fallback")
+            return rule_result
+
+        return llm_result

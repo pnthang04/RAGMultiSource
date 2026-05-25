@@ -21,8 +21,6 @@ class RAGState(TypedDict, total=False):
     scope_resolution: dict[str, Any]
     document_resolution: dict[str, Any]
     retrieval_plan: dict[str, Any]
-    planner_action: str
-    planner_reason: str
 
     document_candidates: list[dict[str, Any]]
     candidate_selection: dict[str, Any]

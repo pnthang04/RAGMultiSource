@@ -22,6 +22,49 @@ def test_retrieval_strategy_splits_hybrid_sources():
     assert [branch.name for branch in plan.branches] == ["system_chunks", "user_upload_chunks"]
     assert plan.branches[0].metadata_filter["source_type"] == "system"
     assert plan.branches[1].metadata_filter["source_type"] == "user_upload"
+    assert [branch.top_k for branch in plan.branches] == [4, 4]
+
+
+def test_retrieval_strategy_uses_reduced_default_top_k():
+    strategy = RetrievalStrategy()
+
+    plan = strategy.plan(
+        rewritten_question="Đối tượng thực hiện?",
+        intent_resolution={"intent": "ask_question", "needs_retrieval": True},
+        scope="system_procedure",
+        metadata_filter={"source_type": "system"},
+    )
+
+    assert plan.mode == "default"
+    assert plan.branches[0].top_k == 3
+
+
+def test_retrieval_strategy_uses_reduced_find_information_top_k():
+    strategy = RetrievalStrategy()
+
+    plan = strategy.plan(
+        rewritten_question="Tìm thông tin lệ phí",
+        intent_resolution={"intent": "find_information", "needs_retrieval": True},
+        scope="system_procedure",
+        metadata_filter={"source_type": "system"},
+    )
+
+    assert plan.mode == "find_information"
+    assert plan.branches[0].top_k == 5
+
+
+def test_retrieval_strategy_uses_reduced_summarize_top_k():
+    strategy = RetrievalStrategy()
+
+    plan = strategy.plan(
+        rewritten_question="Tóm tắt tài liệu",
+        intent_resolution={"intent": "summarize_document", "needs_retrieval": True},
+        scope="system_procedure",
+        metadata_filter={"source_type": "system"},
+    )
+
+    assert plan.mode == "summarize"
+    assert plan.branches[0].top_k == 8
 
 
 def test_retrieval_strategy_does_not_retrieve_general_query():

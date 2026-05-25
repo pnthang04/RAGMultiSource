@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 
 from app.core.constants import (
     RETRIEVAL_SCOPE_CURRENT_SESSION_UPLOADS,
@@ -68,6 +69,39 @@ class FakeDocumentRepository:
                 "uploaded_in_session_id": session_id,
             }
         ]
+
+    async def list_user_documents_by_time_hint(self, user_id: str, time_hint: str, filename: str | None = None):
+        if time_hint == "last_week":
+            return [
+                {
+                    "_id": "doc_last_week_1",
+                    "filename": "week_1.pdf",
+                    "source_type": "user_upload",
+                    "owner_user_id": user_id,
+                    "uploaded_in_session_id": "sess_week_1",
+                    "created_at": datetime(2026, 5, 18, 10, 0, 0),
+                },
+                {
+                    "_id": "doc_last_week_2",
+                    "filename": "week_2.pdf",
+                    "source_type": "user_upload",
+                    "owner_user_id": user_id,
+                    "uploaded_in_session_id": "sess_week_1",
+                    "created_at": datetime(2026, 5, 18, 11, 0, 0),
+                },
+            ]
+        if time_hint == "yesterday":
+            return [
+                {
+                    "_id": "doc_yesterday",
+                    "filename": "yesterday.pdf",
+                    "source_type": "user_upload",
+                    "owner_user_id": user_id,
+                    "uploaded_in_session_id": "sess_yesterday",
+                    "created_at": datetime(2026, 5, 24, 10, 0, 0),
+                }
+            ]
+        return []
 
     async def list_user_ready_documents(self, user_id: str):
         return [
@@ -181,6 +215,23 @@ def test_document_resolver_uses_last_referenced_doc_for_old_upload_follow_up():
 
     assert resolution.selected_document_ids == ["doc_last"]
     assert resolution.metadata_filter["$and"][1] == {"document_id": {"$in": ["doc_last"]}}
+
+
+def test_document_resolver_uses_time_hint_for_old_uploads():
+    resolver = DocumentResolver(FakeDocumentRepository())
+
+    resolution = asyncio.run(
+        resolver.resolve(
+            scope=RETRIEVAL_SCOPE_USER_ALL_UPLOADS,
+            metadata_filter={"source_type": "user_upload", "owner_user_id": "user_1"},
+            user_id="user_1",
+            time_hint="last_week",
+        )
+    )
+
+    assert resolution.selected_document_ids == ["doc_last_week_1", "doc_last_week_2"]
+    assert resolution.reason == "matched uploads by time hint: last_week"
+    assert resolution.metadata_filter["$and"][1] == {"document_id": {"$in": ["doc_last_week_1", "doc_last_week_2"]}}
 
 
 def test_conversation_state_updates_last_referenced_document():

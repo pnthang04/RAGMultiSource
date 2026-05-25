@@ -30,6 +30,7 @@
 html,
 body {
   min-height: 100vh;
+  min-height: 100dvh;
   color: var(--text);
   background: linear-gradient(180deg, var(--bg), var(--bg-2));
   font-family: var(--font-body);
@@ -207,6 +208,8 @@ button:disabled {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
+  align-items: start;
 }
 
 .chat-shell.collapsed {
@@ -214,7 +217,12 @@ button:disabled {
 }
 
 .chat-sidebar {
+  position: sticky;
+  top: 0;
   height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -224,6 +232,7 @@ button:disabled {
   border: 0;
   border-radius: 0;
   box-shadow: none;
+  overflow: hidden;
 }
 
 .chat-sidebar-head {
@@ -780,7 +789,9 @@ button:disabled {
   }
 
   .chat-sidebar {
+    position: relative;
     height: auto;
+    min-height: 100dvh;
   }
 
   .chat-main {

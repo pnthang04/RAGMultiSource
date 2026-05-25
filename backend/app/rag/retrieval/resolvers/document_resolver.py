@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -24,6 +26,19 @@ def _and(*conditions: dict[str, Any]) -> dict[str, Any]:
     if len(clean_conditions) == 1:
         return clean_conditions[0]
     return {"$and": clean_conditions}
+
+
+def _normalize_text(text: str | None) -> str:
+    if not text:
+        return ""
+    normalized = unicodedata.normalize("NFKD", text.lower())
+    stripped = "".join(char for char in normalized if not unicodedata.combining(char))
+    stripped = stripped.replace("đ", "d")
+    return re.sub(r"\s+", " ", stripped).strip()
+
+
+def _token_set(text: str | None) -> set[str]:
+    return {token for token in re.split(r"[^a-z0-9]+", _normalize_text(text)) if len(token) > 1}
 
 
 @dataclass
@@ -103,6 +118,33 @@ class DocumentResolver:
                 documents.append(document)
         return documents
 
+    async def _find_system_documents_by_procedure_hint(self, procedure_title: str) -> list[dict[str, Any]]:
+        documents = await self.document_repository.find_system_documents_by_procedure_title(procedure_title)
+        if documents:
+            return documents
+
+        if not hasattr(self.document_repository, "list_system_ready_documents"):
+            return []
+
+        hint_tokens = _token_set(procedure_title)
+        if not hint_tokens:
+            return []
+
+        system_documents = await self.document_repository.list_system_ready_documents()
+        scored: list[tuple[float, dict[str, Any]]] = []
+        for document in system_documents:
+            title = document.get("procedure_title") or document.get("title") or document.get("filename")
+            title_tokens = _token_set(title)
+            if not title_tokens:
+                continue
+            overlap = hint_tokens & title_tokens
+            score = len(overlap) / len(hint_tokens)
+            if score >= 0.6:
+                scored.append((score, document))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        return [document for _, document in scored[:5]]
+
     async def resolve(
         self,
         scope: str,
@@ -111,6 +153,7 @@ class DocumentResolver:
         session_id: str | None = None,
         detected_filename: str | None = None,
         detected_procedure_title: str | None = None,
+        time_hint: str | None = None,
         selected_document_ids: list[str] | None = None,
         conversation_state: dict[str, Any] | None = None,
     ) -> DocumentResolution:
@@ -129,7 +172,7 @@ class DocumentResolver:
             )
 
         if scope == RETRIEVAL_SCOPE_SYSTEM_PROCEDURE and detected_procedure_title:
-            documents = await self.document_repository.find_system_documents_by_procedure_title(detected_procedure_title)
+            documents = await self._find_system_documents_by_procedure_hint(detected_procedure_title)
             document_ids = [doc["_id"] for doc in documents if doc.get("_id")]
             return DocumentResolution(
                 metadata_filter=self._with_document_filter(metadata_filter, document_ids),
@@ -169,6 +212,20 @@ class DocumentResolver:
             )
 
         if scope == RETRIEVAL_SCOPE_USER_ALL_UPLOADS:
+            if time_hint:
+                documents = await self.document_repository.list_user_documents_by_time_hint(
+                    user_id,
+                    time_hint,
+                    filename=detected_filename,
+                )
+                document_ids = [doc["_id"] for doc in documents if doc.get("_id")]
+                if documents:
+                    return DocumentResolution(
+                        metadata_filter=self._with_document_filter(metadata_filter, document_ids),
+                        selected_document_ids=document_ids,
+                        resolved_documents=self._serialize_docs(documents),
+                        reason=f"matched uploads by time hint: {time_hint}",
+                    )
             last_document = conversation_state.get("last_referenced_doc") or {}
             last_document_id = last_document.get("document_id") if isinstance(last_document, dict) else None
             if last_document_id:

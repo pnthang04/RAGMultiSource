@@ -21,7 +21,6 @@ class RAGGraphRunner:
         graph.add_node("rewrite_query", self.nodes.rewrite_query_node)
         graph.add_node("use_original_query", self.nodes.use_original_query_node)
         graph.add_node("intent_router", self.nodes.intent_router_node)
-        graph.add_node("retrieval_planner", self.nodes.retrieval_planner_node)
         graph.add_node("scope_resolver", self.nodes.scope_resolver_node)
         graph.add_node("document_resolver", self.nodes.document_resolver_node)
         graph.add_node("candidate_selector", self.nodes.candidate_selector_node)
@@ -48,16 +47,6 @@ class RAGGraphRunner:
         graph.add_conditional_edges(
             "intent_router",
             self.nodes.route_after_intent,
-            {
-                "direct_answer": "direct_answer",
-                "clarification": "clarification",
-                "unsupported": "unsupported",
-                "retrieval_planner": "retrieval_planner",
-            },
-        )
-        graph.add_conditional_edges(
-            "retrieval_planner",
-            self.nodes.route_after_planner,
             {
                 "direct_answer": "direct_answer",
                 "clarification": "clarification",

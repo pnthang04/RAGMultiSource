@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     OPENROUTER_QUERY_REWRITE_MODEL: str = "google/gemini-3.1-flash-lite-preview"
     OPENROUTER_REWRITE_GATE_MODEL: str = "google/gemini-3.1-flash-lite-preview"
     OPENROUTER_INTENT_MODEL: str = "google/gemini-3.1-flash-lite-preview"
-    OPENROUTER_SCOPE_MODEL: str = "google/gemini-3.1-flash-lite-preview"
+    OPENROUTER_SCOPE_MODEL: str = "google/gemini-2.0-flash-lite-001"
+    OPENROUTER_SCOPE_MAX_TOKENS: int = 160
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_SITE_URL: str = ""
     OPENROUTER_APP_NAME: str = "RAG Chatbot"

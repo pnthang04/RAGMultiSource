@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -25,6 +27,30 @@ class RewriteGateDecision:
 
 class RewriteGate:
     max_history_tokens = 600
+    _follow_up_terms = (
+        "the ",
+        "the thi",
+        "con ",
+        "con thi",
+        "nhu nao",
+        "bao lau",
+        "bao nhieu",
+        "trinh tu",
+        "cach thuc",
+        "ho so",
+        "giay to",
+        "le phi",
+        "thoi han",
+        "doi tuong",
+        "co quan",
+        "yeu cau",
+        "dieu kien",
+        "no ",
+        "cai do",
+        "thu tuc nay",
+        "file nay",
+        "tai lieu nay",
+    )
 
     def __init__(self) -> None:
         self.prompt = ChatPromptTemplate.from_messages(
@@ -131,6 +157,33 @@ class RewriteGate:
             procedure_title = last_doc.get("procedure_title")
         return procedure_title or ""
 
+    def _normalize_text(self, text: str) -> str:
+        normalized = unicodedata.normalize("NFKD", text.lower())
+        stripped = "".join(char for char in normalized if not unicodedata.combining(char))
+        stripped = stripped.replace("đ", "d")
+        return re.sub(r"\s+", " ", stripped).strip()
+
+    def _has_resolved_context(self, conversation_state: dict[str, Any]) -> bool:
+        last_context = conversation_state.get("last_resolved_context") or {}
+        last_doc = conversation_state.get("last_referenced_doc") or {}
+        return bool(
+            (isinstance(last_context, dict) and last_context.get("filter"))
+            or self._active_document(conversation_state)
+            or self._active_procedure(conversation_state)
+            or (isinstance(last_doc, dict) and last_doc.get("document_id"))
+        )
+
+    def _fallback_decision_for_query(self, original_query: str, conversation_state: dict[str, Any]) -> RewriteGateDecision:
+        normalized = self._normalize_text(original_query)
+        if self._has_resolved_context(conversation_state) and any(term in normalized for term in self._follow_up_terms):
+            return RewriteGateDecision(
+                needs_rewrite=True,
+                reason="Deterministic fallback detected a follow-up query with previous resolved context.",
+                matched_rules=["fallback_follow_up", "has_resolved_context"],
+                used_llm=False,
+            )
+        return self._fallback_decision()
+
     def _fallback_decision(self) -> RewriteGateDecision:
         return RewriteGateDecision(
             needs_rewrite=False,
@@ -146,7 +199,7 @@ class RewriteGate:
     ) -> RewriteGateDecision:
         conversation_state = conversation_state or {}
         if self.chain is None:
-            return self._fallback_decision()
+            return self._fallback_decision_for_query(original_query, conversation_state)
 
         try:
             raw = self.chain.invoke(
@@ -162,7 +215,7 @@ class RewriteGate:
                 raw = raw.removeprefix("json").strip()
             payload = json.loads(raw)
         except Exception:
-            return self._fallback_decision()
+            return self._fallback_decision_for_query(original_query, conversation_state)
 
         return RewriteGateDecision(
             needs_rewrite=bool(payload.get("needs_rewrite")),

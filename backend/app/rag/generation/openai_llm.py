@@ -13,7 +13,15 @@ class OpenAILLMService:
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", RAG_SYSTEM_PROMPT),
-                ("human", "Question: {question}\n\nAnswer style: {answer_style}\n\nContext:\n{context}"),
+                (
+                    "human",
+                    (
+                        "Question: {question}\n\n"
+                        "Answer style: {answer_style}\n\n"
+                        "Context:\n{context}\n\n"
+                        "Return the final Vietnamese answer only."
+                    ),
+                ),
             ]
         )
         self.llm = None
@@ -44,12 +52,22 @@ class OpenAILLMService:
     def _build_context_text(self, contexts: list[dict]) -> str:
         if not contexts:
             return ""
-        return "\n\n".join(
-            [
-                f"[{idx + 1}] {item.get('content', '')}\nMETADATA: {item.get('metadata', {})}\nSIMILARITY: {item.get('similarity')}"
-                for idx, item in enumerate(contexts)
-            ]
-        )
+        chunks: list[str] = []
+        for idx, item in enumerate(contexts):
+            metadata = item.get("metadata") or {}
+            source_type = metadata.get("source_type") or "unknown"
+            source_label = (
+                metadata.get("procedure_title")
+                or metadata.get("filename")
+                or metadata.get("document_name")
+                or metadata.get("document_id")
+                or ""
+            )
+            header = f"[{idx + 1}|{source_type}]"
+            if source_label:
+                header = f"{header} {source_label}"
+            chunks.append(f"{header}\n{item.get('content', '')}")
+        return "\n\n".join(chunks)
 
     def generate_answer(self, question: str, contexts: list[dict], answer_style: str = "short_answer") -> str:
         if not contexts:

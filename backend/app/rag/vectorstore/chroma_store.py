@@ -11,15 +11,13 @@ class ChromaVectorStore:
         self.collection = get_chroma_collection()
 
     def _normalize_metadata_value(self, value: Any) -> Any:
+        """Only keep queryable types: str, int, float, bool. Skip complex types."""
         if value is None:
             return None
         if isinstance(value, (str, int, float, bool)):
             return value
-        if isinstance(value, list):
-            return json.dumps(value, ensure_ascii=False)
-        if isinstance(value, dict):
-            return json.dumps(value, ensure_ascii=False)
-        return str(value)
+        # Skip lists and dicts - they can't be reliably queried
+        return None
 
     def _to_chroma_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
         normalized: dict[str, Any] = {}

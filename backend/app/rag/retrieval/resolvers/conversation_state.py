@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.constants import RETRIEVAL_SCOPE_GENERAL_QUERY, RETRIEVAL_SCOPE_NEED_CLARIFICATION
+
 
 class ConversationStateManager:
     def load(self, session: dict[str, Any] | None, user_id: str, session_id: str | None) -> dict[str, Any]:
@@ -38,14 +40,20 @@ class ConversationStateManager:
         if detected_filename:
             next_state["last_filename"] = detected_filename
 
-        next_state["last_resolved_context"] = {
-            "scope": scope,
-            "source_type": sources[0].get("source_type") if sources else None,
-            "procedure_title": detected_procedure_title or next_state.get("last_procedure_title"),
-            "filename": detected_filename or next_state.get("last_filename"),
-            "document_id": selected_document_ids[0] if selected_document_ids else None,
-            "filter": retrieval_filter,
-        }
+        should_update_resolved_context = bool(retrieval_filter) and scope not in {
+            RETRIEVAL_SCOPE_GENERAL_QUERY,
+            RETRIEVAL_SCOPE_NEED_CLARIFICATION,
+        } and bool(sources or selected_document_ids)
+
+        if should_update_resolved_context:
+            next_state["last_resolved_context"] = {
+                "scope": scope,
+                "source_type": sources[0].get("source_type") if sources else None,
+                "procedure_title": detected_procedure_title or next_state.get("last_procedure_title"),
+                "filename": detected_filename or next_state.get("last_filename"),
+                "document_id": selected_document_ids[0] if selected_document_ids else None,
+                "filter": retrieval_filter,
+            }
 
         if sources:
             first_source = sources[0]

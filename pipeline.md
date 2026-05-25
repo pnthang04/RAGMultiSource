@@ -25,13 +25,13 @@ flowchart TD
     L -- general_query / needs_retrieval=false --> M[direct_answer_node]
     L -- unsupported --> N[unsupported_node]
     L -- need_clarification --> O[clarification_node]
-    L -- needs retrieval --> P[retrieval_planner_node]
+    L -- needs retrieval --> P[scope_resolver_node]
 
-    P --> Q{Planner action}
+    P --> Q{Scope clarification?}
     Q -- need_clarification --> O
     Q -- general_query --> M
     Q -- unsupported --> N
-    Q -- retrieve --> R[scope_resolver_node<br/>confirm final scope]
+    Q -- continue --> R[scope_resolver_node<br/>confirm final scope]
 
     R --> R2{Reuse last filter?}
     R2 -- Yes --> V[build_filter_node<br/>deterministic metadata filter]
@@ -79,7 +79,7 @@ User Query
 → rewrite_query_node nếu needs_rewrite=true
 → use_original_query_node nếu needs_rewrite=false
 → intent_router_node
-→ retrieval_planner_node nếu query cần retrieval
+→ scope_resolver_node nếu query cần retrieval
 → scope_resolver_node
 → document_resolver_node
 → candidate_selector_node
@@ -118,8 +118,6 @@ State chính gồm:
   "document_resolution": {},
   "retrieval_plan": {},
 
-  "planner_action": "...",
-  "planner_reason": "...",
   "document_candidates": [],
   "candidate_selection": {},
   "metadata_filter": {},
@@ -204,7 +202,7 @@ Intent hiện có:
 
 Nếu `general_query` hoặc `needs_retrieval=false` thì đi thẳng `direct_answer_node`.
 
-### 5. `retrieval_planner_node`
+### 5. `scope_resolver_node`
 
 Quyết định action retrieval trước khi resolve document.
 
@@ -564,7 +562,7 @@ rewrite_gate.needs_rewrite=true  → rewrite_query_node
 rewrite_gate.needs_rewrite=false → use_original_query_node
 ```
 
-### 2. `retrieval_planner_node`
+### 2. `scope_resolver_node`
 
 Mục tiêu:
 
@@ -609,8 +607,6 @@ Output partial update:
 
 ```json
 {
-  "planner_action": "reuse_last_filter",
-  "planner_reason": "Safe follow-up with last resolved context.",
   "retrieval_plan": {
     "action": "reuse_last_filter",
     "target_scope": "system_procedure",
@@ -658,14 +654,14 @@ User: Giấy đăng ký kết hôn đăng ký tại đâu?
 Turn 2:
 User: Đi đăng ký cần chuẩn bị gì?
 → rewritten_query = Thủ tục đăng ký kết hôn cần chuẩn bị giấy tờ gì?
-→ planner_action = reuse_last_filter
+→ retrieval_plan.action = reuse_last_filter
 ```
 
 ### 3. `scope_resolver_node`
 
 Mục tiêu:
 
-- Là node trung gian thông minh giữa `retrieval_planner_node` và `document_resolver_node`.
+- Là node trung gian thông minh giữa intent resolution và `document_resolver_node`.
 - Nhận `retrieval_plan.action` nhưng không tin tuyệt đối.
 - Dùng `RAGState` để xác định scope thật.
 - Dùng LLM structured output khi cần hiểu câu mơ hồ.
@@ -682,7 +678,6 @@ Input từ `RAGState`:
   "was_rewritten": true,
   "intent_resolution": {},
   "retrieval_plan": {},
-  "planner_action": "...",
   "runtime_context": {
     "recent_chat_history": [],
     "last_resolved_context": {},
@@ -1132,34 +1127,11 @@ Mục tiêu lượt sau:
 
 Phần này là bản cập nhật quan trọng cho flow hiện tại.
 
-### 1. Phân Vai Lại `retrieval_planner_node` Và `scope_resolver_node`
+### 1. `scope_resolver_node`
 
-`retrieval_planner_node` chỉ là fast-path planner.
+`scope_resolver_node` là nơi xác nhận scope cuối cùng.
 
-Node này chỉ quyết định action sơ bộ:
-
-- `reuse_last_filter`
-- `resolve_system_procedure`
-- `resolve_current_upload`
-- `resolve_previous_upload`
-- `resolve_user_file_name`
-- `semantic_document_search`
-- `mixed_retrieval`
-- `need_clarification`
-- `general_query`
-- `unsupported`
-
-Node này không làm các việc sau:
-
-- Không xác nhận scope cuối cùng.
-- Không build metadata filter.
-- Không resolve document.
-- Không chọn document cụ thể.
-- Không quyết định quyền truy cập.
-
-`scope_resolver_node` mới là nơi xác nhận scope cuối cùng.
-
-Node này nhận action từ planner như một hint, sau đó dùng:
+Node này dùng:
 
 - `RAGState`
 - `last_resolved_context`
@@ -1175,7 +1147,7 @@ Node này nhận action từ planner như một hint, sau đó dùng:
 Nói ngắn gọn:
 
 ```text
-retrieval_planner_node = định hướng nhanh
+scope_resolver_node = định hướng scope nhanh
 scope_resolver_node = xác nhận scope cuối cùng
 build_filter_node = build metadata filter cuối cùng
 ```
@@ -1212,8 +1184,7 @@ Mermaid cập nhật:
 
 ```mermaid
 flowchart TD
-    A[retrieval_planner_node] --> B[scope_resolver_node]
-    B --> C{should_reuse_last_filter?}
+    A[scope_resolver_node] --> B{should_reuse_last_filter?}
 
     C -- Yes --> D[build_filter_node]
     C -- No --> E[document_resolver_node]
@@ -1305,7 +1276,7 @@ User Query
 → rewrite_detector_node
 → rewrite_query_node hoặc use_original_query_node
 → intent_router_node
-→ retrieval_planner_node
+→ scope_resolver_node
 → scope_resolver_node
 → nếu should_reuse_last_filter=true: build_filter_node
 → nếu should_reuse_last_filter=false: document_resolver_node
@@ -1319,12 +1290,6 @@ User Query
 ```
 
 ### 5. Trách Nhiệm Cuối Cùng Của Từng Node Sau Khi Sửa
-
-`retrieval_planner_node`:
-
-- Fast path.
-- Đề xuất action sơ bộ.
-- Không xác nhận scope cuối.
 
 `scope_resolver_node`:
 

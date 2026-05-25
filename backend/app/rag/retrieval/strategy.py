@@ -75,20 +75,20 @@ class RetrievalStrategy:
                 mode="hybrid_compare",
                 should_retrieve=True,
                 branches=[
-                    RetrievalBranch("system_chunks", rewritten_question, system_filter, 6),
-                    RetrievalBranch("user_upload_chunks", rewritten_question, user_filter, 6),
+                    RetrievalBranch("system_chunks", rewritten_question, system_filter, 4),
+                    RetrievalBranch("user_upload_chunks", rewritten_question, user_filter, 4),
                 ],
                 reason="Compare intent retrieves system and user-upload sources separately.",
             )
 
         if intent == "summarize_document":
-            top_k = 12
+            top_k = 8
             mode = "summarize"
         elif intent == "find_information":
-            top_k = 8
+            top_k = 5
             mode = "find_information"
         else:
-            top_k = 5
+            top_k = 3
             mode = "default"
 
         return RetrievalPlan(
