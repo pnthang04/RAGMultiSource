@@ -64,7 +64,7 @@ Chi tiet flow va thiet ke node nam trong [pipeline.md](./pipeline.md).
 - `rewrite_query_node`: rewrite follow-up/mo ho thanh standalone query.
 - `intent_router_node`: phan loai user muon lam gi, vi du `ask_question`, `compare_documents`, `general_query`.
 - `scope_resolver_node`: state-aware + LLM structured output de xac nhan scope cuoi.
-- `document_resolver_node`: resolve document/procedure bang MongoDB metadata.
+- `document_resolver_node`: resolve document/procedure bang MongoDB metadata; voi system docs, uu tien pre-filter theo `procedure_title + summary` truoc khi search chunk.
 - `candidate_selector_node`: chon document candidate neu du chac, hoi lai neu mo ho.
 - `build_filter_node`: build metadata filter cuoi cung bang code.
 - `retrieval_node`: search Chroma trong metadata filter.
@@ -111,6 +111,7 @@ He thong theo huong controlled agentic RAG:
 - Rule/code/metadata duoc dung cho:
   - retrieval planner fast path
   - document resolver
+  - system document pre-filter theo `procedure_title + summary`
   - metadata filter
   - permission check
   - evidence validation
@@ -161,11 +162,12 @@ OPENAI_MODEL=gpt-4o-mini
 LLM_PROVIDER=openrouter
 OPENROUTER_API_KEY=...
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
-OPENROUTER_MODEL=openai/gpt-4.1-nano
-OPENROUTER_QUERY_REWRITE_MODEL=google/gemini-3.1-flash-lite-preview
-OPENROUTER_REWRITE_GATE_MODEL=google/gemini-3.1-flash-lite-preview
-OPENROUTER_INTENT_MODEL=google/gemini-3.1-flash-lite-preview
-OPENROUTER_SCOPE_MODEL=google/gemini-3.1-flash-lite-preview
+OPENROUTER_MODEL=google/gemini-2.5-flash-lite
+OPENROUTER_QUERY_REWRITE_MODEL=google/gemini-2.5-flash-lite
+OPENROUTER_REWRITE_GATE_MODEL=google/gemini-2.5-flash-lite
+OPENROUTER_INTENT_MODEL=google/gemini-2.5-flash-lite
+OPENROUTER_SCOPE_MODEL=google/gemini-2.5-flash-lite
+OPENROUTER_SCOPE_MAX_TOKENS=128
 
 INTENT_ROUTER_USE_LLM=true
 SCOPE_RESOLVER_USE_LLM=true
@@ -265,9 +267,80 @@ Metadata quan trong:
 - `session_id`
 - `filename`
 - `procedure_title`
+- `summary` tren document system, sinh boi script metadata summary
 - `visibility`
 - `page_number`
 - `section_title`
+
+## System Document Summary
+
+System documents co field `summary` luu truc tiep tren document trong MongoDB. Summary nay duoc dung trong `DocumentResolver` cung voi `procedure_title` de pre-filter system document truoc khi retrieval xuong chunk.
+
+Tao hoac cap nhat summary bang OpenRouter:
+
+```bash
+python backend/scripts/generate_system_document_metadata_summaries.py --overwrite
+```
+
+Chay thu khong ghi DB:
+
+```bash
+python backend/scripts/generate_system_document_metadata_summaries.py --limit 1 --dry-run
+```
+
+Script mac dinh dung model:
+
+```text
+google/gemini-2.5-flash-lite
+```
+
+Field duoc ghi vao MongoDB:
+
+```text
+summary
+```
+
+Khong luu cac field phu nhu keyword/procedure type.
+
+## Retrieval Benchmark
+
+Benchmark retrieval system docs nam tai:
+
+```text
+backend/tests/fixtures/system_retrieval_benchmark.jsonl
+```
+
+Moi case gom:
+
+- `query`
+- `expected_document.document_id`
+- `expected_chunk_ids`
+- `evidence_chunks[].chunk_id`
+
+Sinh benchmark tu system markdown va chunk da luu trong MongoDB:
+
+```bash
+python backend/scripts/generate_system_retrieval_benchmark.py --limit 10 --queries-per-doc 2 --chunk-source stored
+```
+
+Neu MongoDB chua co chunk va muon fallback tam sang chunk markdown:
+
+```bash
+python backend/scripts/generate_system_retrieval_benchmark.py --limit 10 --queries-per-doc 2 --chunk-source stored --allow-markdown-fallback
+```
+
+Ket qua benchmark gan nhat sau khi dung pre-filter `procedure_title + summary`:
+
+```text
+total: 20
+doc hit: 20/20 = 100%
+chunk hit: 19/20 = 95%
+chunk top-1: 10/20
+chunk top-3: 19/20
+MRR: 0.7167
+```
+
+Miss con lai la case co nhieu chunk cung document cung chua thong tin dung ve thoi han; retrieval top-1 tra ve chunk dung noi dung nhung khac `expected_chunk_id`.
 
 ## Testing
 
@@ -300,8 +373,10 @@ Da co:
 - Rewrite gate + query rewriter.
 - Intent router.
 - Scope analyzer co LLM structured output va fallback.
+- OpenRouter Gemini 2.5 Flash Lite cho answer, rewrite gate, query rewrite, intent router, scope analyzer.
 - Deterministic metadata filter.
 - Permission check theo user/session.
+- System document summary va document pre-filter theo `procedure_title + summary`.
 - Candidate selector.
 - Evidence validation.
 - Source formatter.
@@ -311,7 +386,6 @@ Da co:
 Can cai thien tiep:
 
 - Chuyen logic persist state that vao `update_state_node`, de `ChatService` chi persist ket qua.
-- Bo sung semantic document catalog fields: `auto_summary`, `keywords`, `detected_entities`, `document_topic`.
 - Cai thien candidate selector voi confidence scoring/LLM selector top 3-5 metadata.
 - Them BM25/hybrid retrieval/reranking neu can.
 - Doi FastAPI startup sang lifespan.
