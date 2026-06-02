@@ -173,27 +173,7 @@ class DocumentResolver:
         if documents:
             return documents
 
-        if not hasattr(self.document_repository, "list_system_ready_documents"):
-            return []
-
-        hint_tokens = _token_set(procedure_title)
-        if not hint_tokens:
-            return []
-
-        system_documents = await self.document_repository.list_system_ready_documents()
-        scored: list[tuple[float, dict[str, Any]]] = []
-        for document in system_documents:
-            title = document.get("procedure_title") or document.get("title") or document.get("filename")
-            title_tokens = _token_set(title)
-            if not title_tokens:
-                continue
-            overlap = hint_tokens & title_tokens
-            score = len(overlap) / len(hint_tokens)
-            if score >= 0.6:
-                scored.append((score, document))
-
-        scored.sort(key=lambda item: item[0], reverse=True)
-        return [document for _, document in scored[:5]]
+        return await self._find_system_documents_by_query(procedure_title, limit=3)
 
     async def _find_system_documents_by_query(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
         if not query.strip() or not hasattr(self.document_repository, "list_system_ready_documents"):
