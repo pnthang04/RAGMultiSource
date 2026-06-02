@@ -178,6 +178,7 @@ class DocumentService:
             "page_count": document.get("page_count"),
             "page_source": document.get("page_source"),
             "chunk_count": document.get("chunk_count"),
+            "summary": document.get("summary"),
             "file_size_bytes": document.get("file_size_bytes"),
             "content_hash": document.get("content_hash"),
             "created_at": document.get("created_at"),

@@ -168,7 +168,7 @@ def test_document_resolver_authorizes_selected_document_ids():
     assert resolution.metadata_filter["$and"][1] == {"document_id": {"$in": ["doc_1"]}}
 
 
-def test_document_resolver_rejects_selected_current_session_doc_from_other_session():
+def test_document_resolver_allows_explicit_selected_upload_from_other_session_for_same_user():
     resolver = DocumentResolver(FakeDocumentRepository())
 
     resolution = asyncio.run(
@@ -181,8 +181,8 @@ def test_document_resolver_rejects_selected_current_session_doc_from_other_sessi
         )
     )
 
-    assert resolution.selected_document_ids == []
-    assert resolution.needs_clarification is True
+    assert resolution.selected_document_ids == ["doc_1"]
+    assert resolution.needs_clarification is False
 
 
 def test_document_resolver_uses_current_session_uploads():

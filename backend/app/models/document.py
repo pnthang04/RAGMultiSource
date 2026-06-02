@@ -23,6 +23,7 @@ class DocumentModel(MongoBaseModel):
     page_count: Optional[int] = None
     page_source: Optional[str] = None
     chunk_count: Optional[int] = None
+    summary: Optional[str] = None
     file_size_bytes: Optional[int] = None
     content_hash: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)

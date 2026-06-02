@@ -34,7 +34,7 @@ def test_intent_router_routes_document_questions_directly_to_document_resolver()
     route = nodes.route_after_intent(
         {
             "intent_resolution": {"intent": "ask_question", "needs_retrieval": True, "is_follow_up": False},
-            "scope_resolution": {"action": "resolve_document", "scope": "system_only"},
+            "scope_resolution": {"scope": "system_only"},
         }
     )
 
@@ -47,10 +47,8 @@ def test_intent_router_node_builds_scope_resolution_for_system_query(monkeypatch
     def fake_route(question, conversation_state=None):
         return IntentResolution(
             intent="ask_question",
-            answer_style="short_answer",
             needs_retrieval=True,
             is_follow_up=False,
-            action="resolve_document",
             scope="system_only",
             targets=[
                 {
@@ -68,7 +66,8 @@ def test_intent_router_node_builds_scope_resolution_for_system_query(monkeypatch
     result = nodes.intent_router_node({"final_query": "le phi cap lai thong bao la bao nhieu", "runtime_context": {}})
 
     assert result["scope_resolution"]["scope"] == "system_only"
-    assert result["scope_resolution"]["action"] == "resolve_document"
+    assert "action" not in result["scope_resolution"]
+    assert "answer_style" not in result["intent_resolution"]
     assert result["retrieval_plan"]["target_scope"] == "system_only"
 
 
@@ -126,19 +125,32 @@ def test_route_after_intent_sends_follow_up_to_rewrite_query():
     route = nodes.route_after_intent(
         {
             "intent_resolution": {"intent": "ask_question", "needs_retrieval": True, "is_follow_up": True},
-            "scope_resolution": {"action": "resolve_document", "scope": "system_only"},
+            "scope_resolution": {"scope": "system_only"},
         }
     )
 
     assert route == "rewrite_query"
 
 
-def test_route_after_intent_reuse_goes_to_build_filter():
+def test_route_after_intent_reuse_follow_up_goes_to_rewrite_query():
     nodes = _nodes()
 
     route = nodes.route_after_intent(
         {
             "intent_resolution": {"intent": "ask_question", "needs_retrieval": True, "is_follow_up": True},
+            "scope_resolution": {"action": "reuse_last_filter", "scope": "system_only"},
+        }
+    )
+
+    assert route == "rewrite_query"
+
+
+def test_route_after_intent_reuse_without_follow_up_goes_to_build_filter():
+    nodes = _nodes()
+
+    route = nodes.route_after_intent(
+        {
+            "intent_resolution": {"intent": "ask_question", "needs_retrieval": True, "is_follow_up": False},
             "scope_resolution": {"action": "reuse_last_filter", "scope": "system_only"},
         }
     )
@@ -152,7 +164,7 @@ def test_route_after_intent_general_query_goes_direct_answer():
     route = nodes.route_after_intent(
         {
             "intent_resolution": {"intent": "general_query", "needs_retrieval": False},
-            "scope_resolution": {"action": "direct_answer", "scope": "none"},
+            "scope_resolution": {"scope": "none"},
         }
     )
 
@@ -165,7 +177,7 @@ def test_route_after_intent_need_clarification_goes_clarification():
     route = nodes.route_after_intent(
         {
             "intent_resolution": {"intent": "need_clarification", "needs_retrieval": False},
-            "scope_resolution": {"action": "need_clarification", "scope": "need_clarification"},
+            "scope_resolution": {"scope": "need_clarification"},
         }
     )
 
@@ -299,6 +311,52 @@ def test_build_filter_node_builds_deterministic_filter_after_scope_resolution():
     assert result["metadata_filter"]["$and"][1] == {"document_id": {"$in": ["doc_1"]}}
 
 
+def test_selected_upload_attachment_overrides_system_intent_scope(monkeypatch):
+    nodes = _nodes()
+
+    def fake_route(question, conversation_state=None):
+        return IntentResolution(
+            intent="ask_question",
+            needs_retrieval=True,
+            is_follow_up=False,
+            scope="system_only",
+            targets=[],
+            confidence=0.8,
+            matched_rules=["document_question"],
+        )
+
+    monkeypatch.setattr(nodes.pipeline.intent_router, "route", fake_route)
+    intent_result = nodes.intent_router_node(
+        {
+            "final_query": "ke hoach sinh nhat gom ai",
+            "runtime_context": {},
+            "selected_document_ids": ["doc_upload_1"],
+            "retrieval_plan": {},
+        }
+    )
+
+    assert intent_result["scope_resolution"]["scope"] == "current_session_uploads"
+    assert intent_result["scope_resolution"]["targets"][0]["source_type"] == SOURCE_TYPE_USER_UPLOAD
+    assert "selected_upload_attachment" in intent_result["intent_resolution"]["matched_rules"]
+
+    filter_result = nodes.build_filter_node(
+        {
+            "user_id": "user_1",
+            "session_id": "sess_1",
+            "selected_document_ids": ["doc_upload_1"],
+            "scope_resolution": intent_result["scope_resolution"],
+            "document_resolution": {"selected_document_ids": ["doc_upload_1"]},
+        }
+    )
+
+    assert filter_result["metadata_filter"]["$and"][0]["$and"] == [
+        {"source_type": SOURCE_TYPE_USER_UPLOAD},
+        {"owner_user_id": "user_1"},
+        {"session_id": "sess_1"},
+    ]
+    assert filter_result["metadata_filter"]["$and"][1] == {"document_id": {"$in": ["doc_upload_1"]}}
+
+
 def test_intent_router_guard_keeps_admin_fee_question_in_rag_path(monkeypatch):
     router = IntentRouter()
 
@@ -349,6 +407,20 @@ def test_intent_router_treats_procedure_sequence_as_follow_up_document_question(
                 "scope": "system_only",
                 "filter": {"source_type": SOURCE_TYPE_SYSTEM, "procedure_title": "cap lai thong bao"},
             }
+        },
+    )
+
+    assert result.intent == "ask_question"
+    assert result.needs_retrieval is True
+    assert result.is_follow_up is True
+
+
+def test_intent_router_treats_implementation_method_as_follow_up_with_last_scope_only():
+    result = IntentRouter()._route_by_rules(
+        "hinh thuc thuc hien thi nhu nao ban",
+        {
+            "last_scope": "system_procedure",
+            "last_procedure_title": "Cap lai van ban xac nhan thong bao hoat dong buu chinh",
         },
     )
 

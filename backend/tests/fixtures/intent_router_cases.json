@@ -3,28 +3,24 @@
     "id": "ask_question_system_procedure",
     "question": "Thủ tục đăng ký thành lập doanh nghiệp tư nhân cần hồ sơ gì?",
     "expected_intent": "ask_question",
-    "expected_answer_style": "bullet_list",
     "expected_needs_retrieval": true
   },
   {
     "id": "summarize_uploaded_document",
     "question": "Tóm tắt tài liệu này cho tôi",
     "expected_intent": "summarize_document",
-    "expected_answer_style": "summary",
     "expected_needs_retrieval": true
   },
   {
     "id": "compare_system_and_upload",
     "question": "Đối chiếu tài liệu hệ thống với file tôi upload",
     "expected_intent": "compare_documents",
-    "expected_answer_style": "comparison",
     "expected_needs_retrieval": true
   },
   {
     "id": "find_information",
     "question": "Tìm lệ phí trong file hoc_phi_2024.pdf",
     "expected_intent": "find_information",
-    "expected_answer_style": "short_answer",
     "expected_needs_retrieval": true
   },
   {

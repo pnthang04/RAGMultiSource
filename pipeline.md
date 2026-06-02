@@ -56,10 +56,8 @@ The intent router returns both user intent and source scope:
 ```json
 {
   "intent": "ask_question",
-  "answer_style": "short_answer",
   "needs_retrieval": true,
   "is_follow_up": false,
-  "action": "resolve_document",
   "scope": "current_uploads_only",
   "targets": [
     {
@@ -91,7 +89,6 @@ Downstream nodes still consume `scope_resolution`. It is now created directly fr
 
 ```json
 {
-  "action": "resolve_document",
   "scope": "current_uploads_only",
   "targets": [
     {
@@ -138,14 +135,12 @@ Classifies:
 - follow-up state
 - source scope
 - upload timing
-- retrieval action
 - retrieval targets
 
 It writes:
 
 - `intent_resolution`
 - `scope_resolution`
-- `retrieval_plan.action`
 - `retrieval_plan.target_scope`
 - `retrieval_plan.scope_resolution`
 
@@ -174,6 +169,7 @@ Handles multiple document candidates.
 Builds the final deterministic metadata filter.
 
 If `scope_resolution.action == "reuse_last_filter"`, it reuses `last_resolved_context.filter`.
+Normal retrieval does not include an `action` field.
 
 ### `retrieval_strategy_node`
 

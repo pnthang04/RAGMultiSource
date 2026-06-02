@@ -6,6 +6,17 @@ import type { DocumentUploadResponse } from "@/features/documents/types";
 const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 const AUTH_TOKEN_KEY = "rag_chatbot_auth_token";
 
+export class ApiError extends Error {
+  status: number;
+  detail: unknown;
+
+  constructor(status: number, detail: unknown) {
+    super(`Request failed: ${status}`);
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
 function readAuthToken() {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(AUTH_TOKEN_KEY);
@@ -36,7 +47,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    let detail: unknown = null;
+    try {
+      detail = await response.json();
+    } catch {
+      detail = await response.text().catch(() => null);
+    }
+    throw new ApiError(response.status, detail);
   }
 
   return (await response.json()) as T;

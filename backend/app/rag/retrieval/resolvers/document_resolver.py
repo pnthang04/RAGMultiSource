@@ -108,21 +108,11 @@ class DocumentResolver:
         if source_type != SOURCE_TYPE_USER_UPLOAD or document.get("owner_user_id") != user_id:
             return False
 
-        if scope in {
-            "current_uploads_only",
-            RETRIEVAL_SCOPE_CURRENT_SESSION_UPLOADS,
-            RETRIEVAL_SCOPE_CURRENT_UPLOAD,
-        }:
-            return bool(session_id) and document.get("uploaded_in_session_id") == session_id
-
-        return scope in {
-            "past_uploads_only",
-            "user_uploads_all",
-            "mixed",
-            RETRIEVAL_SCOPE_USER_ALL_UPLOADS,
-            RETRIEVAL_SCOPE_USER_FILE_NAME,
-            RETRIEVAL_SCOPE_HYBRID_SYSTEM_AND_USER,
-        }
+        # Explicit selected_document_ids come from a user action in the UI
+        # (for example, asking about an attached upload). Ownership is the
+        # security boundary; requiring the current session to match here makes
+        # valid attachments fail if the active session state changes client-side.
+        return True
 
     async def _resolve_selected_documents(
         self,

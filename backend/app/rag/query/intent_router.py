@@ -22,12 +22,6 @@ INTENT_GENERAL_QUERY = "general_query"
 INTENT_NEED_CLARIFICATION = "need_clarification"
 INTENT_UNSUPPORTED = "unsupported"
 
-ANSWER_STYLE_SHORT = "short_answer"
-ANSWER_STYLE_BULLET_LIST = "bullet_list"
-ANSWER_STYLE_SUMMARY = "summary"
-ANSWER_STYLE_COMPARISON = "comparison"
-ANSWER_STYLE_STEPS = "steps"
-
 ACTION_RESOLVE_DOCUMENT = "resolve_document"
 ACTION_MIXED_RETRIEVAL = "mixed_retrieval"
 ACTION_REUSE_LAST_FILTER = "reuse_last_filter"
@@ -63,7 +57,6 @@ def _normalize_text(text: str) -> str:
 @dataclass
 class IntentResolution:
     intent: str
-    answer_style: str = ANSWER_STYLE_SHORT
     is_follow_up: bool = False
     needs_retrieval: bool = True
     action: str | None = None
@@ -75,7 +68,6 @@ class IntentResolution:
 
     def model_dump(self) -> dict[str, Any]:
         payload = asdict(self)
-        payload.pop("answer_style", None)
         payload.pop("reason", None)
         if payload.get("action") in {None, ACTION_RESOLVE_DOCUMENT, ACTION_DIRECT_ANSWER}:
             payload.pop("action", None)
@@ -163,6 +155,7 @@ class IntentRouter:
         "the",
         "con",
         "thi sao",
+        "nhu nao",
         "bao lau",
         "le phi",
         "phi",
@@ -170,6 +163,9 @@ class IntentRouter:
         "giay to",
         "ho so",
         "trinh tu",
+        "hinh thuc",
+        "hinh thuc thuc hien",
+        "thuc hien",
         "doi tuong",
         "no",
         "cai do",
@@ -183,27 +179,79 @@ class IntentRouter:
                     (
                         "system",
                         (
-                            "You are an intent router for a Vietnamese administrative-document RAG system.\n"
-                            "Choose intent and retrieval source scope in one step.\n"
-                            "Intents: ask_question, summarize_document, compare_documents, find_information, "
-                            "general_query, need_clarification, unsupported.\n"
-                            "Scopes: system_only, current_uploads_only, past_uploads_only, user_uploads_all, "
-                            "mixed, none, need_clarification.\n"
-                            "Use system_only for administrative/system docs. Use current_uploads_only for files "
-                            "just uploaded in this session. Use past_uploads_only for user uploads with time hints "
-                            "like yesterday, last week, last month, or a date. Use user_uploads_all for generic "
-                            "user uploads. Use mixed for comparing uploaded files with system regulations.\n"
-                            "Set is_follow_up=true only when the query depends on recent conversation.\n"
-                            "Only include action when action is reuse_last_filter. Omit action for normal retrieval.\n"
-                            "Use general_query only for greetings or questions about the chatbot itself.\n"
-                            "Do not create metadata filters. Do not include reason.\n"
-                            "Return valid JSON only, no markdown, no explanation.\n"
-                            "Schema: {\"intent\":\"...\",\"needs_retrieval\":true,"
-                            "\"is_follow_up\":false,\"scope\":\"system_only\","
-                            "\"targets\":[{\"source_type\":\"system\",\"session_scope\":null,"
+                            "Bạn là chuyên gia intent router cho hệ thống RAG tài liệu hành chính Việt Nam.\n"
+                            "Nhiệm vụ: phân loại intent, nguồn tài liệu, phạm vi upload, và trạng thái follow-up. "
+                            "Không trả lời câu hỏi của người dùng.\n\n"
+                            "Chỉ trả về MỘT JSON object hợp lệ. Không markdown. Không giải thích. Không thêm reason. "
+                            "Không tạo metadata_filter, owner_user_id, session_id, document_id.\n\n"
+                            "Schema:\n"
+                            "{\"intent\":\"ask_question|summarize_document|compare_documents|find_information|general_query|need_clarification|unsupported\","
+                            "\"needs_retrieval\":true,"
+                            "\"is_follow_up\":false,"
+                            "\"scope\":\"system_only|current_uploads_only|past_uploads_only|user_uploads_all|mixed|none|need_clarification\","
+                            "\"targets\":[{\"source_type\":\"system|user_upload\",\"session_scope\":\"current_session|past_sessions|all_sessions|null\","
                             "\"procedure_title_hint\":null,\"document_name_hint\":null,\"time_hint\":null}],"
-                            "\"confidence\":0.0,\"matched_rules\":[]}"
+                            "\"confidence\":0.0,\"matched_rules\":[]}\n\n"
+                            "Quy tắc scope:\n"
+                            "- system_only: hỏi thủ tục hành chính, lệ phí, hồ sơ, giấy tờ, thời hạn, quy định, tài liệu hệ thống.\n"
+                            "- current_uploads_only: hỏi file/tài liệu vừa upload, vừa gửi, file này, tài liệu này trong session hiện tại.\n"
+                            "- past_uploads_only: hỏi upload cũ có mốc thời gian như hôm qua, hôm trước, tuần trước, tháng trước, ngày cụ thể.\n"
+                            "- user_uploads_all: hỏi tài liệu người dùng upload nói chung nhưng không rõ current hay past.\n"
+                            "- mixed: so sánh/đối chiếu file upload với quy định hoặc tài liệu hệ thống.\n"
+                            "- none: chào hỏi hoặc hỏi chatbot làm được gì, không cần truy hồi.\n"
+                            "- need_clarification: chỉ dùng khi thật sự không phân biệt được nguồn/tài liệu.\n\n"
+                            "Quy tắc follow-up:\n"
+                            "- is_follow_up=true khi query phụ thuộc ngữ cảnh trước đó hoặc cần lịch sử để hiểu đầy đủ.\n"
+                            "- Nếu has_last_filter=true, query là follow-up an toàn, và không có tín hiệu đổi nguồn, có thể thêm \"action\":\"reuse_last_filter\".\n"
+                            "- Không thêm action cho truy hồi bình thường. Đặc biệt không trả \"action\":\"resolve_document\".\n"
+                            "- Nếu query nhắc file upload mới/cũ, ngày tháng, so sánh, đối chiếu, hoặc đổi nguồn thì không reuse filter cũ.\n\n"
+                            "Chuẩn time_hint:\n"
+                            "- hôm qua/hôm trước -> yesterday\n"
+                            "- hôm kia -> two_days_ago\n"
+                            "- tuần trước -> last_week\n"
+                            "- tháng trước -> last_month\n"
+                            "- ngày cụ thể -> giữ nguyên mốc ngày người dùng nói\n"
                         ),
+                    ),
+                    (
+                        "human",
+                        'State: {"query":"lệ phí khi cấp lại thông báo văn bản bưu chính là bao nhiêu","has_last_filter":false}',
+                    ),
+                    (
+                        "ai",
+                        '{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"system_only","targets":[{"source_type":"system","session_scope":null,"procedure_title_hint":"cấp lại thông báo văn bản bưu chính","document_name_hint":null,"time_hint":null}],"confidence":0.94,"matched_rules":["system_docs"]}',
+                    ),
+                    (
+                        "human",
+                        'State: {"query":"file tôi vừa upload nói gì","has_last_filter":false,"current_session_doc_count":1}',
+                    ),
+                    (
+                        "ai",
+                        '{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"current_uploads_only","targets":[{"source_type":"user_upload","session_scope":"current_session","procedure_title_hint":null,"document_name_hint":null,"time_hint":null}],"confidence":0.93,"matched_rules":["current_upload"]}',
+                    ),
+                    (
+                        "human",
+                        'State: {"query":"tài liệu tôi upload tháng trước có nội dung gì","has_last_filter":false}',
+                    ),
+                    (
+                        "ai",
+                        '{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"past_uploads_only","targets":[{"source_type":"user_upload","session_scope":"past_sessions","procedure_title_hint":null,"document_name_hint":null,"time_hint":"last_month"}],"confidence":0.92,"matched_rules":["past_upload_time"]}',
+                    ),
+                    (
+                        "human",
+                        'State: {"query":"đối chiếu file tôi upload với quy định hệ thống","has_last_filter":false}',
+                    ),
+                    (
+                        "ai",
+                        '{"intent":"compare_documents","needs_retrieval":true,"is_follow_up":false,"scope":"mixed","targets":[{"source_type":"system","session_scope":null,"procedure_title_hint":null,"document_name_hint":null,"time_hint":null},{"source_type":"user_upload","session_scope":"current_session","procedure_title_hint":null,"document_name_hint":null,"time_hint":null}],"confidence":0.9,"matched_rules":["compare"]}',
+                    ),
+                    (
+                        "human",
+                        'State: {"query":"lệ phí bao nhiêu","has_last_filter":true,"last_scope":"system_only","last_source_type":"system","last_procedure_title":"đăng ký kết hôn"}',
+                    ),
+                    (
+                        "ai",
+                        '{"intent":"ask_question","needs_retrieval":true,"is_follow_up":true,"action":"reuse_last_filter","scope":"system_only","targets":[],"confidence":0.9,"matched_rules":["reuse_last_filter"]}',
                     ),
                     ("human", "State: {state_json}"),
                 ]
@@ -224,17 +272,6 @@ class IntentRouter:
 
     def _contains_any(self, text: str, terms: tuple[str, ...]) -> bool:
         return any(term in text for term in terms)
-
-    def _answer_style(self, text: str, intent: str) -> str:
-        if intent == INTENT_COMPARE_DOCUMENTS:
-            return ANSWER_STYLE_COMPARISON
-        if intent == INTENT_SUMMARIZE_DOCUMENT:
-            return ANSWER_STYLE_SUMMARY
-        if any(term in text for term in ("cac buoc", "quy trinh", "cach thuc")):
-            return ANSWER_STYLE_STEPS
-        if any(term in text for term in ("liet ke", "danh sach", "gom nhung gi", "can ho so", "ho so gi", "giay to gi")):
-            return ANSWER_STYLE_BULLET_LIST
-        return ANSWER_STYLE_SHORT
 
     def _filename_hint(self, question: str) -> str | None:
         match = re.search(r"\b([a-z0-9][a-z0-9_\-().\[\]]*\.(?:pdf|docx?|xlsx?|pptx?|txt|md))\b", question, re.I)
@@ -283,7 +320,18 @@ class IntentRouter:
 
     def _looks_like_follow_up(self, question: str, conversation_state: dict[str, Any]) -> bool:
         last_context = conversation_state.get("last_resolved_context") or {}
-        if not last_context.get("filter"):
+        has_previous_context = any(
+            (
+                last_context.get("filter"),
+                last_context.get("scope"),
+                last_context.get("procedure_title"),
+                last_context.get("filename"),
+                conversation_state.get("last_scope"),
+                conversation_state.get("last_procedure_title"),
+                conversation_state.get("last_filename"),
+            )
+        )
+        if not has_previous_context:
             return False
         text = _normalize_text(question)
         return len(text.split()) <= 7 or self._contains_any(text, self._follow_up_terms)
@@ -374,16 +422,6 @@ class IntentRouter:
         if intent not in allowed_intents:
             return None
 
-        answer_style = payload.get("answer_style") or ANSWER_STYLE_SHORT
-        if answer_style not in {
-            ANSWER_STYLE_SHORT,
-            ANSWER_STYLE_BULLET_LIST,
-            ANSWER_STYLE_SUMMARY,
-            ANSWER_STYLE_COMPARISON,
-            ANSWER_STYLE_STEPS,
-        }:
-            answer_style = ANSWER_STYLE_SHORT
-
         scope = payload.get("scope") or SCOPE_NEED_CLARIFICATION
         if scope not in ALLOWED_SCOPES:
             scope = SCOPE_NEED_CLARIFICATION
@@ -420,7 +458,6 @@ class IntentRouter:
 
         return IntentResolution(
             intent=intent,
-            answer_style=answer_style,
             is_follow_up=bool(payload.get("is_follow_up")),
             needs_retrieval=bool(payload.get("needs_retrieval", intent not in {INTENT_GENERAL_QUERY, INTENT_NEED_CLARIFICATION, INTENT_UNSUPPORTED})),
             action=action,
@@ -541,7 +578,6 @@ class IntentRouter:
 
         return IntentResolution(
             intent=intent,
-            answer_style=self._answer_style(text, intent),
             is_follow_up=is_follow_up,
             needs_retrieval=True,
             action=action,

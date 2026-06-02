@@ -16,6 +16,11 @@ export type SourceItem = {
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
+  attachment?: {
+    document_id: string;
+    filename: string;
+    type: "document";
+  } | null;
   sources?: SourceItem[];
   created_at?: string | null;
 };

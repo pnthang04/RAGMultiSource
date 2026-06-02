@@ -4,13 +4,24 @@ import type { ChatMessage } from "@/features/chat/types";
 
 export function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
+  const hasAttachment = isUser && Boolean(message.attachment);
 
   return (
-    <div className={`message ${isUser ? "user" : "assistant"}`}>
+    <div className={`message ${isUser ? "user" : "assistant"} ${hasAttachment ? "has-attachment" : ""}`}>
       <div className="message-head">
-        <span>{isUser ? "Bạn" : "Trợ lý"}</span>
-        {!isUser && message.sources?.length ? <span>{message.sources.length} nguồn</span> : null}
+        <span>{isUser ? "Ban" : "Tro ly"}</span>
+        {!isUser && message.sources?.length ? <span>{message.sources.length} nguon</span> : null}
       </div>
+
+      {hasAttachment && message.attachment ? (
+        <div className="message-attachment" title={message.attachment.filename}>
+          <div className="attachment-icon" aria-hidden="true" />
+          <div className="attachment-copy">
+            <div className="attachment-name">{message.attachment.filename}</div>
+            <div className="attachment-type">Document</div>
+          </div>
+        </div>
+      ) : null}
 
       <div className="message-content">{message.content}</div>
 

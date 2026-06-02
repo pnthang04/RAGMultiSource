@@ -1,14 +1,31 @@
 from __future__ import annotations
 
+import re
+import unicodedata
+
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
 from app.core.config import settings
 from app.rag.generation.prompts import RAG_SYSTEM_PROMPT
+from app.rag.retrieval.context_validator import FALLBACK_NO_CONTEXT
 
 
 class OpenAILLMService:
+    clarification_patterns = (
+        "ban co the cung cap them",
+        "ban co the cho minh them",
+        "ban co the cho biet them",
+        "cung cap them thong tin",
+        "cho minh them thong tin",
+        "them thong tin ve",
+        "them boi canh",
+        "de minh co the",
+        "de toi co the",
+        "xac dinh",
+    )
+
     def __init__(self) -> None:
         self.prompt = ChatPromptTemplate.from_messages(
             [
@@ -24,8 +41,23 @@ class OpenAILLMService:
                 ),
             ]
         )
+        self.direct_prompt = ChatPromptTemplate.from_messages(
+            [
+                (
+                    "system",
+                    (
+                        "Ban la chatbot ho tro hoi dap tai lieu hanh chinh Viet Nam.\n"
+                        "Chi tra loi cau chao hoi, cau hoi ve kha nang cua chatbot, hoac huong dan cach hoi.\n"
+                        "Khong bia noi dung tai lieu, thu tuc, le phi, ho so hay quy dinh neu khong co context.\n"
+                        "Neu nguoi dung hoi noi dung tai lieu cu the, hay huong dan ho hoi ve tai lieu he thong hoac file da upload."
+                    ),
+                ),
+                ("human", "{question}"),
+            ]
+        )
         self.llm = None
         self.chain = None
+        self.direct_chain = None
         provider = settings.LLM_PROVIDER.strip().lower()
         if provider == "openrouter" and settings.OPENROUTER_API_KEY:
             default_headers = {}
@@ -41,6 +73,7 @@ class OpenAILLMService:
                 default_headers=default_headers or None,
             )
             self.chain = self.prompt | self.llm | StrOutputParser()
+            self.direct_chain = self.direct_prompt | self.llm | StrOutputParser()
         elif settings.OPENAI_API_KEY:
             self.llm = ChatOpenAI(
                 model=settings.OPENAI_MODEL,
@@ -48,6 +81,17 @@ class OpenAILLMService:
                 temperature=0,
             )
             self.chain = self.prompt | self.llm | StrOutputParser()
+            self.direct_chain = self.direct_prompt | self.llm | StrOutputParser()
+
+    def _normalize_text(self, text: str) -> str:
+        normalized = unicodedata.normalize("NFKD", text.lower())
+        stripped = "".join(char for char in normalized if not unicodedata.combining(char))
+        stripped = stripped.replace("đ", "d")
+        return re.sub(r"\s+", " ", stripped).strip()
+
+    def _should_replace_with_fallback(self, answer: str) -> bool:
+        normalized = self._normalize_text(answer)
+        return any(pattern in normalized for pattern in self.clarification_patterns)
 
     def _build_context_text(self, contexts: list[dict]) -> str:
         if not contexts:
@@ -71,9 +115,18 @@ class OpenAILLMService:
 
     def generate_answer(self, question: str, contexts: list[dict], answer_style: str = "short_answer") -> str:
         if not contexts:
-            return "Không tìm thấy thông tin này trong tài liệu phù hợp."
+            return FALLBACK_NO_CONTEXT
         context_text = self._build_context_text(contexts)
         if self.chain is None:
-            return f"[LangChain] OPENAI_API_KEY chưa được cấu hình.\n\n{context_text[:1200]}"
+            return f"[LangChain] OPENAI_API_KEY chua duoc cau hinh.\n\n{context_text[:1200]}"
         result = self.chain.invoke({"question": question, "answer_style": answer_style, "context": context_text})
+        answer = result.strip() if isinstance(result, str) else str(result)
+        if self._should_replace_with_fallback(answer):
+            return FALLBACK_NO_CONTEXT
+        return answer
+
+    def generate_direct_answer(self, question: str) -> str:
+        if self.direct_chain is None:
+            return "Minh la chatbot ho tro hoi dap tai lieu hanh chinh. Ban co the hoi ve tai lieu he thong hoac file ban da upload."
+        result = self.direct_chain.invoke({"question": question})
         return result.strip() if isinstance(result, str) else str(result)

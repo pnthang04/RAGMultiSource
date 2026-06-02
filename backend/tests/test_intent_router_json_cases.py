@@ -15,7 +15,5 @@ def test_intent_router_json_cases():
 
         assert result.intent == case["expected_intent"], case["id"]
         assert result.needs_retrieval is case["expected_needs_retrieval"], case["id"]
-        if "expected_answer_style" in case:
-            assert result.answer_style == case["expected_answer_style"], case["id"]
         if "expected_is_follow_up" in case:
             assert result.is_follow_up is case["expected_is_follow_up"], case["id"]

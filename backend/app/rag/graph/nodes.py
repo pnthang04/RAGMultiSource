@@ -266,6 +266,22 @@ class RAGGraphNodes:
             conversation_state=state.get("runtime_context") or {},
         )
         intent_resolution = resolution.model_dump()
+        if state.get("selected_document_ids"):
+            intent_resolution["scope"] = RETRIEVAL_SCOPE_CURRENT_SESSION_UPLOADS
+            intent_resolution["targets"] = [
+                {
+                    "source_type": SOURCE_TYPE_USER_UPLOAD,
+                    "session_scope": "current_session",
+                    "procedure_title_hint": None,
+                    "document_name_hint": None,
+                    "time_hint": None,
+                }
+            ]
+            intent_resolution["needs_retrieval"] = True
+            intent_resolution["matched_rules"] = list(
+                dict.fromkeys([*(intent_resolution.get("matched_rules") or []), "selected_upload_attachment"])
+            )
+            intent_resolution.pop("action", None)
         scope_resolution = {
             "scope": intent_resolution.get("scope"),
             "targets": intent_resolution.get("targets") or [],
@@ -402,6 +418,20 @@ class RAGGraphNodes:
         scope_resolution = state.get("scope_resolution") or {}
         document_resolution = dict(state.get("document_resolution") or {})
         selected_document_ids = document_resolution.get("selected_document_ids") or state.get("selected_document_ids") or []
+        if state.get("selected_document_ids"):
+            scope_resolution = {
+                **scope_resolution,
+                "scope": RETRIEVAL_SCOPE_CURRENT_SESSION_UPLOADS,
+                "targets": [
+                    {
+                        "source_type": SOURCE_TYPE_USER_UPLOAD,
+                        "session_scope": "current_session",
+                        "procedure_title_hint": None,
+                        "document_name_hint": None,
+                        "time_hint": None,
+                    }
+                ],
+            }
         resolved_documents = document_resolution.get("resolved_documents") or []
         first_document = resolved_documents[0] if resolved_documents else {}
         system_target = self._target_for_source(scope_resolution, "system")
@@ -517,7 +547,6 @@ class RAGGraphNodes:
         answer = self.pipeline.llm.generate_answer(
             question=state["final_query"],
             contexts=contexts,
-            answer_style=intent.get("answer_style", "short_answer"),
         )
         if state.get("mixed_branch_warnings"):
             answer = answer + "\n\n" + "\n".join(state["mixed_branch_warnings"])
@@ -533,8 +562,10 @@ class RAGGraphNodes:
 
     @traceable(name="rag_direct_answer_node")
     def direct_answer_node(self, state: dict[str, Any]) -> dict[str, Any]:
+        query = state.get("final_query") or state.get("original_query") or ""
+        answer = self.pipeline.llm.generate_direct_answer(query)
         return {
-            "answer": "Mình là chatbot hỗ trợ hỏi đáp tài liệu hành chính. Bạn có thể hỏi về tài liệu hệ thống hoặc file bạn đã upload.",
+            "answer": answer,
             "sources": [],
             "raw_contexts": [],
             "context_validation": {"contexts": [], "should_answer": False, "fallback_answer": None, "warnings": [], "rejected_count": 0},
@@ -583,10 +614,10 @@ class RAGGraphNodes:
             return "clarification"
         if intent == INTENT_GENERAL_QUERY or not intent_resolution.get("needs_retrieval", True):
             return "direct_answer"
-        if action == "reuse_last_filter":
-            return "build_filter"
         if intent_resolution.get("is_follow_up"):
             return "rewrite_query"
+        if action == "reuse_last_filter":
+            return "build_filter"
         return "document_resolver"
 
     def route_after_scope_resolution(self, state: dict[str, Any]) -> str:
