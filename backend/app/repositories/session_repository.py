@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from app.db.mongodb import get_database
+from app.db.mongo_retry import retry_mongo_write
 from app.models.session import SessionModel
 
 
@@ -25,7 +26,7 @@ class SessionRepository:
     async def update_session(self, session_id: str, **fields: Any) -> bool:
         payload = dict(fields)
         payload["updated_at"] = datetime.utcnow()
-        result = await self._collection().update_one({"_id": session_id}, {"$set": payload})
+        result = await retry_mongo_write(lambda: self._collection().update_one({"_id": session_id}, {"$set": payload}))
         return result.modified_count > 0
 
     async def delete_session(self, session_id: str) -> bool:
@@ -34,7 +35,9 @@ class SessionRepository:
 
     async def touch_session(self, session_id: str) -> None:
         now = datetime.utcnow()
-        await self._collection().update_one(
-            {"_id": session_id},
-            {"$set": {"last_message_at": now, "updated_at": now}},
+        await retry_mongo_write(
+            lambda: self._collection().update_one(
+                {"_id": session_id},
+                {"$set": {"last_message_at": now, "updated_at": now}},
+            )
         )
