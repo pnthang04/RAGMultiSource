@@ -28,7 +28,7 @@ SYSTEM_PROMPT = """Bạn là chuyên gia tóm tắt nội dung văn bản thủ 
 Nhiệm vụ: đọc tài liệu markdown và viết một summary ngắn, tập trung vào nội dung cốt lõi của chính thủ tục, để lưu trực tiếp vào field summary của document.
 
 Yêu cầu nội dung:
-- Viết bằng tiếng Việt tự nhiên, rõ nghĩadda, 3-4 câu.
+- Viết bằng tiếng Việt tự nhiên, rõ nghĩa, 3-4 câu.
 - Câu 1 nêu thủ tục này dùng để làm gì và áp dụng cho ai/đối tượng nào nếu tài liệu có.
 - Các câu tiếp theo tóm tắt thông tin thực chất người dùng hay cần tra cứu: hồ sơ/thành phần chính, điều kiện quan trọng, cách nộp, thời hạn giải quyết, cơ quan thực hiện, kết quả nhận được.
 - Ưu tiên thông tin phân biệt tài liệu này với tài liệu khác; tránh viết chung chung kiểu "quy định trình tự, hồ sơ, thời hạn".

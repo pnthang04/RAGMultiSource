@@ -374,6 +374,7 @@ class RAGGraphNodes:
                 time_hint=time_hint,
                 selected_document_ids=state.get("selected_document_ids") or [],
                 conversation_state=state.get("runtime_context") or {},
+                query_text=query,
             )
         return {
             "document_resolution": resolution.model_dump(),

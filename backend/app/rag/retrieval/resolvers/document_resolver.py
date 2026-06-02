@@ -17,6 +17,7 @@ from app.core.constants import (
     SOURCE_TYPE_USER_UPLOAD,
     VISIBILITY_GLOBAL,
 )
+from app.rag.embedding.bge_embedding import BGEEmbeddingService
 from app.repositories.document_repository import DocumentRepository
 
 
@@ -57,6 +58,8 @@ class DocumentResolution:
 class DocumentResolver:
     def __init__(self, document_repository: DocumentRepository | None = None) -> None:
         self.document_repository = document_repository or DocumentRepository()
+        self.embedding_service = BGEEmbeddingService()
+        self._system_doc_embedding_cache: dict[str, list[float]] = {}
 
     def _is_system_scope(self, scope: str) -> bool:
         return scope in {"system_only", RETRIEVAL_SCOPE_SYSTEM_PROCEDURE, RETRIEVAL_SCOPE_SYSTEM_DOCS}
@@ -88,11 +91,48 @@ class DocumentResolver:
                 "owner_user_id": doc.get("owner_user_id"),
                 "session_id": doc.get("uploaded_in_session_id"),
                 "procedure_title": doc.get("procedure_title"),
+                "summary": doc.get("summary"),
                 "visibility": doc.get("visibility"),
                 "created_at": doc.get("created_at"),
             }
             for doc in documents
         ]
+
+    def _system_document_match_text(self, document: dict[str, Any]) -> str:
+        parts = [
+            document.get("procedure_title"),
+            document.get("summary"),
+            document.get("title"),
+            document.get("filename"),
+        ]
+        return "\n".join(str(part).strip() for part in parts if part and str(part).strip())
+
+    def _cosine_similarity(self, left: list[float], right: list[float]) -> float:
+        if not left or not right:
+            return 0.0
+        import math
+
+        dot_product = sum(a * b for a, b in zip(left, right))
+        left_norm = math.sqrt(sum(value * value for value in left))
+        right_norm = math.sqrt(sum(value * value for value in right))
+        if left_norm == 0 or right_norm == 0:
+            return 0.0
+        return dot_product / (left_norm * right_norm)
+
+    def _token_overlap_score(self, query: str, document: dict[str, Any]) -> float:
+        query_tokens = _token_set(query)
+        doc_tokens = _token_set(self._system_document_match_text(document))
+        if not query_tokens or not doc_tokens:
+            return 0.0
+        return len(query_tokens & doc_tokens) / len(query_tokens)
+
+    def _system_doc_embedding(self, document: dict[str, Any]) -> list[float]:
+        document_id = str(document.get("_id") or "")
+        text = self._system_document_match_text(document)
+        cache_key = f"{document_id}:{hash(text)}"
+        if cache_key not in self._system_doc_embedding_cache:
+            self._system_doc_embedding_cache[cache_key] = self.embedding_service.embed_text(text)
+        return self._system_doc_embedding_cache[cache_key]
 
     def _is_authorized_selected_document(
         self,
@@ -155,6 +195,34 @@ class DocumentResolver:
         scored.sort(key=lambda item: item[0], reverse=True)
         return [document for _, document in scored[:5]]
 
+    async def _find_system_documents_by_query(self, query: str, limit: int = 3) -> list[dict[str, Any]]:
+        if not query.strip() or not hasattr(self.document_repository, "list_system_ready_documents"):
+            return []
+
+        system_documents = await self.document_repository.list_system_ready_documents()
+        if not system_documents:
+            return []
+
+        query_embedding = self.embedding_service.embed_text(query)
+        scored: list[tuple[float, float, float, dict[str, Any]]] = []
+        for document in system_documents:
+            overlap_score = self._token_overlap_score(query, document)
+            semantic_score = self._cosine_similarity(query_embedding, self._system_doc_embedding(document))
+            combined_score = (semantic_score * 0.75) + (overlap_score * 0.25)
+            scored.append((combined_score, semantic_score, overlap_score, document))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        if not scored:
+            return []
+
+        best_score = scored[0][0]
+        selected = [
+            document
+            for combined_score, semantic_score, overlap_score, document in scored[:limit]
+            if combined_score >= 0.28 and combined_score >= best_score - 0.08
+        ]
+        return selected or [scored[0][3]]
+
     async def resolve(
         self,
         scope: str,
@@ -166,6 +234,7 @@ class DocumentResolver:
         time_hint: str | None = None,
         selected_document_ids: list[str] | None = None,
         conversation_state: dict[str, Any] | None = None,
+        query_text: str | None = None,
     ) -> DocumentResolution:
         conversation_state = conversation_state or {}
         selected_document_ids = selected_document_ids or []
@@ -190,6 +259,17 @@ class DocumentResolver:
                 resolved_documents=self._serialize_docs(documents),
                 needs_clarification=len(documents) > 1,
                 reason="matched system procedure title",
+            )
+
+        if self._is_system_scope(scope) and query_text:
+            documents = await self._find_system_documents_by_query(query_text)
+            document_ids = [doc["_id"] for doc in documents if doc.get("_id")]
+            return DocumentResolution(
+                metadata_filter=self._with_document_filter(metadata_filter, document_ids),
+                selected_document_ids=document_ids,
+                resolved_documents=self._serialize_docs(documents),
+                needs_clarification=False,
+                reason="matched system documents by procedure_title and summary",
             )
 
         if scope == RETRIEVAL_SCOPE_USER_FILE_NAME and detected_filename:
