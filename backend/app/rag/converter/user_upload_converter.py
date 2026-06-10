@@ -2,7 +2,7 @@ from pathlib import Path
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
-
+from backend.app.rag.ingestion.loader import Loader
 
 class UserUploadMarkdownConverter:
     def _normalize_text(self, text: str) -> str:
@@ -48,14 +48,15 @@ class UserUploadMarkdownConverter:
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        suffix = input_file.suffix.lower()
-        if suffix == ".pdf":
-            markdown_text = self._convert_pdf(input_file)
-        elif suffix == ".docx":
-            markdown_text = self._convert_docx(input_file)
-        else:
-            raise ValueError(f"Unsupported user upload file type: {suffix}")
-
+        # suffix = input_file.suffix.lower()
+        # if suffix == ".pdf":
+        #     markdown_text = self._convert_pdf(input_file)
+        # elif suffix == ".docx":
+        #     markdown_text = self._convert_docx(input_file)
+        # else:
+        #     raise ValueError(f"Unsupported user upload file type: {suffix}")
+        loader = Loader()
+        markdown_text = loader.read(path=input_file)
         if not markdown_text:
             raise ValueError("Could not extract text from uploaded document.")
         if not markdown_text.endswith("\n"):

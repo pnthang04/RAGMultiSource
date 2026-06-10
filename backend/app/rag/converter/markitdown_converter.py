@@ -14,6 +14,7 @@ from docx.oxml.text.paragraph import CT_P
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 from pypdf import PdfReader
+from backend.app.rag.ingestion.loader import Loader
 
 try:
     from markitdown import MarkItDown
@@ -450,10 +451,13 @@ class MarkItDownMarkdownConverter:
         output_file = Path(output_path)
         output_file.parent.mkdir(parents=True, exist_ok=True)
 
-        if engine == "markitdown":
-            markdown_text = self._extract_markdown(input_file)
-        else:
-            raise ValueError("engine must be one of: markitdown")
+        # if engine == "markitdown":
+        #     markdown_text = self._extract_markdown(input_file)
+        # else:
+        #     raise ValueError("engine must be one of: markitdown")
+
+        loader = Loader()
+        markdown_text = loader.read(input_file)
         markdown_text = self._apply_cleanup(markdown_text, cleanup_profile)
         if not markdown_text.endswith("\n"):
             markdown_text += "\n"

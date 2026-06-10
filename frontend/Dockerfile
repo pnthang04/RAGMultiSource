@@ -12,7 +12,6 @@ COPY features /app/features
 COPY hooks /app/hooks
 COPY lib /app/lib
 COPY types /app/types
-COPY public /app/public
 
 RUN npm install
 RUN npm run build

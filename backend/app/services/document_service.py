@@ -32,8 +32,8 @@ class DocumentService:
     def _validate_document_type(self, file: UploadFile) -> str:
         filename = Path(file.filename or "").name
         ext = Path(filename).suffix.lower().lstrip(".")
-        if ext not in {"pdf", "docx"}:
-            raise ValueError("Only PDF and DOCX files are supported.")
+        # if ext not in {"pdf", "docx"}:
+        #     raise ValueError("Only PDF and DOCX files are supported.")
         return ext
 
     def _build_raw_path(self, owner_user_id: str, document_id: str, extension: str) -> Path:

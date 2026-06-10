@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "openai"
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = "google/gemini-2.5-flash-lite"
+    OPENROUTER_IMAGE_MODEL: str = "google/gemini-2.5-flash"
     OPENROUTER_QUERY_REWRITE_MODEL: str = "google/gemini-2.5-flash-lite"
     OPENROUTER_REWRITE_GATE_MODEL: str = "google/gemini-2.5-flash-lite"
     OPENROUTER_INTENT_MODEL: str = "google/gemini-2.5-flash-lite"
