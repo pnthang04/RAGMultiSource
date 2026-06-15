@@ -185,13 +185,23 @@ class IntentRouter:
                             "Chỉ trả về MỘT JSON object hợp lệ. Không markdown. Không giải thích. Không thêm reason. "
                             "Không tạo metadata_filter, owner_user_id, session_id, document_id.\n\n"
                             "Schema:\n"
-                            "{\"intent\":\"ask_question|summarize_document|compare_documents|find_information|general_query|need_clarification|unsupported\","
-                            "\"needs_retrieval\":true,"
-                            "\"is_follow_up\":false,"
-                            "\"scope\":\"system_only|current_uploads_only|past_uploads_only|user_uploads_all|mixed|none|need_clarification\","
-                            "\"targets\":[{\"source_type\":\"system|user_upload\",\"session_scope\":\"current_session|past_sessions|all_sessions|null\","
-                            "\"procedure_title_hint\":null,\"document_name_hint\":null,\"time_hint\":null}],"
-                            "\"confidence\":0.0,\"matched_rules\":[]}\n\n"
+                            "{{\n"
+                            '  "intent": "ask_question|summarize_document|compare_documents|find_information|general_query|need_clarification|unsupported",\n'
+                            '  "needs_retrieval": true,\n'
+                            '  "is_follow_up": false,\n'
+                            '  "scope": "system_only|current_uploads_only|past_uploads_only|user_uploads_all|mixed|none|need_clarification",\n'
+                            '  "targets": [\n'
+                            '    {{\n'
+                            '      "source_type": "system|user_upload",\n'
+                            '      "session_scope": "current_session|past_sessions|all_sessions|null",\n'
+                            '      "procedure_title_hint": null,\n'
+                            '      "document_name_hint": null,\n'
+                            '      "time_hint": null\n'
+                            "    }}\n"
+                            "  ],\n"
+                            '  "confidence": 0.0,\n'
+                            '  "matched_rules": []\n'
+                            "}}\n\n"
                             "Quy tắc scope:\n"
                             "- system_only: hỏi thủ tục hành chính, lệ phí, hồ sơ, giấy tờ, thời hạn, quy định, tài liệu hệ thống.\n"
                             "- current_uploads_only: hỏi file/tài liệu vừa upload, vừa gửi, file này, tài liệu này trong session hiện tại.\n"
@@ -215,43 +225,43 @@ class IntentRouter:
                     ),
                     (
                         "human",
-                        'State: {"query":"lệ phí khi cấp lại thông báo văn bản bưu chính là bao nhiêu","has_last_filter":false}',
+                        'State: {{"query":"lệ phí khi cấp lại thông báo văn bản bưu chính là bao nhiêu","has_last_filter":false}}',
                     ),
                     (
                         "ai",
-                        '{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"system_only","targets":[{"source_type":"system","session_scope":null,"procedure_title_hint":"cấp lại thông báo văn bản bưu chính","document_name_hint":null,"time_hint":null}],"confidence":0.94,"matched_rules":["system_docs"]}',
+                        '{{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"system_only","targets":[{{"source_type":"system","session_scope":null,"procedure_title_hint":"cấp lại thông báo văn bản bưu chính","document_name_hint":null,"time_hint":null}}],"confidence":0.94,"matched_rules":["system_docs"]}}',
                     ),
                     (
                         "human",
-                        'State: {"query":"file tôi vừa upload nói gì","has_last_filter":false,"current_session_doc_count":1}',
+                        'State: {{"query":"file tôi vừa upload nói gì","has_last_filter":false,"current_session_doc_count":1}}',
                     ),
                     (
                         "ai",
-                        '{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"current_uploads_only","targets":[{"source_type":"user_upload","session_scope":"current_session","procedure_title_hint":null,"document_name_hint":null,"time_hint":null}],"confidence":0.93,"matched_rules":["current_upload"]}',
+                        '{{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"current_uploads_only","targets":[{{"source_type":"user_upload","session_scope":"current_session","procedure_title_hint":null,"document_name_hint":null,"time_hint":null}}],"confidence":0.93,"matched_rules":["current_upload"]}}',
                     ),
                     (
                         "human",
-                        'State: {"query":"tài liệu tôi upload tháng trước có nội dung gì","has_last_filter":false}',
+                        'State: {{"query":"tài liệu tôi upload tháng trước có nội dung gì","has_last_filter":false}}',
                     ),
                     (
                         "ai",
-                        '{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"past_uploads_only","targets":[{"source_type":"user_upload","session_scope":"past_sessions","procedure_title_hint":null,"document_name_hint":null,"time_hint":"last_month"}],"confidence":0.92,"matched_rules":["past_upload_time"]}',
+                        '{{"intent":"ask_question","needs_retrieval":true,"is_follow_up":false,"scope":"past_uploads_only","targets":[{{"source_type":"user_upload","session_scope":"past_sessions","procedure_title_hint":null,"document_name_hint":null,"time_hint":"last_month"}}],"confidence":0.92,"matched_rules":["past_upload_time"]}}',
                     ),
                     (
                         "human",
-                        'State: {"query":"đối chiếu file tôi upload với quy định hệ thống","has_last_filter":false}',
+                        'State: {{"query":"đối chiếu file tôi upload với quy định hệ thống","has_last_filter":false}}',
                     ),
                     (
                         "ai",
-                        '{"intent":"compare_documents","needs_retrieval":true,"is_follow_up":false,"scope":"mixed","targets":[{"source_type":"system","session_scope":null,"procedure_title_hint":null,"document_name_hint":null,"time_hint":null},{"source_type":"user_upload","session_scope":"current_session","procedure_title_hint":null,"document_name_hint":null,"time_hint":null}],"confidence":0.9,"matched_rules":["compare"]}',
+                        '{{"intent":"compare_documents","needs_retrieval":true,"is_follow_up":false,"scope":"mixed","targets":[{{"source_type":"system","session_scope":null,"procedure_title_hint":null,"document_name_hint":null,"time_hint":null}},{{"source_type":"user_upload","session_scope":"current_session","procedure_title_hint":null,"document_name_hint":null,"time_hint":null}}],"confidence":0.9,"matched_rules":["compare"]}}',
                     ),
                     (
                         "human",
-                        'State: {"query":"lệ phí bao nhiêu","has_last_filter":true,"last_scope":"system_only","last_source_type":"system","last_procedure_title":"đăng ký kết hôn"}',
+                        'State: {{"query":"lệ phí bao nhiêu","has_last_filter":true,"last_scope":"system_only","last_source_type":"system","last_procedure_title":"đăng ký kết hôn"}}',
                     ),
                     (
                         "ai",
-                        '{"intent":"ask_question","needs_retrieval":true,"is_follow_up":true,"action":"reuse_last_filter","scope":"system_only","targets":[],"confidence":0.9,"matched_rules":["reuse_last_filter"]}',
+                        '{{"intent":"ask_question","needs_retrieval":true,"is_follow_up":true,"action":"reuse_last_filter","scope":"system_only","targets":[],"confidence":0.9,"matched_rules":["reuse_last_filter"]}}',
                     ),
                     ("human", "State: {state_json}"),
                 ]

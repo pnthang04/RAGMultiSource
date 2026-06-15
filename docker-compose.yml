@@ -7,6 +7,16 @@ services:
     volumes:
       - mongodb_data:/data/db
 
+  mongo-express:
+    image: mongo-express
+    container_name: rag-mongo-express
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://rag-mongodb:27017
+    depends_on:
+      - mongodb
+      
   chroma:
     image: chromadb/chroma:latest
     container_name: rag-chroma
@@ -61,7 +71,7 @@ services:
     env_file:
       - frontend/.env.local
     ports:
-      - "3000:3000"
+      - "3001:3000"
 
 volumes:
   mongodb_data:
